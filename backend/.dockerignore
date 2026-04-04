@@ -8,5 +8,4 @@ dist
 service-account.json
 coverage
 .eslintrc.json
-tsconfig.json
 src
