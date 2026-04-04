@@ -8,4 +8,3 @@ dist
 service-account.json
 coverage
 .eslintrc.json
-src
