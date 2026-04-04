@@ -1,12 +1,10 @@
 import { Router, Response } from "express";
-import { FieldValue } from "firebase-admin/firestore";
 import { appVerify } from "../middleware/appVerify";
 import { authMiddleware } from "../middleware/authMiddleware";
 import { killSwitch } from "../middleware/killSwitch";
 import { rateLimiter } from "../middleware/rateLimiter";
 import { chat } from "../services/geminiService";
 import { trackUsage } from "../services/usageService";
-import { getFirestore } from "../config/firebase";
 import { AuthenticatedRequest, ChatRequestBody } from "../types";
 
 export const chatRouter = Router();
@@ -24,7 +22,7 @@ chatRouter.post(
   rateLimiter,
   async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
-      const { message, sessionId, context } = req.body as ChatRequestBody;
+      const { message, sessionId, context, history } = req.body as ChatRequestBody;
 
       // ── Input validation ──
       if (!message || typeof message !== "string") {
@@ -56,6 +54,7 @@ chatRouter.post(
         context,
         planType,
         maxContextChars: planLimits.max_context_chars,
+        history,
       });
 
       // ── Track usage (Redis + Firestore) ──
@@ -65,33 +64,6 @@ chatRouter.post(
         tokenInput: result.tokenInput,
         tokenOutput: result.tokenOutput,
       });
-
-      // ── Save both messages to chat_history ──
-      const db = getFirestore();
-      const batch = db.batch();
-      const chatCol = db.collection("chat_history");
-
-      batch.create(chatCol.doc(), {
-        user_id: userId,
-        app_id: appId,
-        session_id: sessionId,
-        role: "user",
-        content: message,
-        tokens_used: result.tokenInput,
-        created_at: FieldValue.serverTimestamp(),
-      });
-
-      batch.create(chatCol.doc(), {
-        user_id: userId,
-        app_id: appId,
-        session_id: sessionId,
-        role: "assistant",
-        content: result.response,
-        tokens_used: result.tokenOutput,
-        created_at: FieldValue.serverTimestamp(),
-      });
-
-      await batch.commit();
 
       // ── Return response ──
       res.json({

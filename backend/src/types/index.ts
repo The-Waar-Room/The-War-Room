@@ -43,14 +43,9 @@ export interface AiUsageDoc {
   cost_usd: number;
 }
 
-export interface ChatMessageDoc {
-  user_id: string;
-  app_id: string;
-  session_id: string;
+export interface ChatHistoryMessage {
   role: "user" | "assistant";
   content: string;
-  tokens_used: number;
-  created_at: FirebaseFirestore.Timestamp;
 }
 
 export interface PlanLimits {
@@ -108,6 +103,7 @@ export interface ChatRequestBody {
   message: string;
   sessionId: string;
   context?: Record<string, unknown>;
+  history?: ChatHistoryMessage[];
 }
 
 // ── Subscription verify body ──
