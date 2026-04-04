@@ -1,0 +1,12 @@
+node_modules
+dist
+.git
+.gitignore
+.env
+*.md
+*.log
+service-account.json
+coverage
+.eslintrc.json
+tsconfig.json
+src

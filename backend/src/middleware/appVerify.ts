@@ -1,0 +1,55 @@
+import { Response, NextFunction } from "express";
+import { createHash } from "crypto";
+import { getFirestore } from "../config/firebase";
+import { AuthenticatedRequest, AppDoc } from "../types";
+
+/**
+ * Middleware 1: Verify x-app-id + x-app-secret headers.
+ * - Looks up app document in Firestore apps collection
+ * - Hashes provided secret with SHA-256 and compares to stored secret_hash
+ * - Rejects if app not found, inactive, or secret mismatch
+ * - Attaches appId and appDoc to request
+ */
+export async function appVerify(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    const appId = req.headers["x-app-id"] as string | undefined;
+    const appSecret = req.headers["x-app-secret"] as string | undefined;
+
+    if (!appId || !appSecret) {
+      res.status(401).json({ success: false, error: "Missing app credentials" });
+      return;
+    }
+
+    const db = getFirestore();
+    const appSnap = await db.collection("apps").doc(appId).get();
+
+    if (!appSnap.exists) {
+      res.status(401).json({ success: false, error: "Invalid app credentials" });
+      return;
+    }
+
+    const appDoc = appSnap.data() as AppDoc;
+
+    if (!appDoc.is_active) {
+      res.status(403).json({ success: false, error: "App is disabled" });
+      return;
+    }
+
+    const secretHash = createHash("sha256").update(appSecret).digest("hex");
+    if (secretHash !== appDoc.secret_hash) {
+      res.status(401).json({ success: false, error: "Invalid app credentials" });
+      return;
+    }
+
+    req.appId = appId;
+    req.appDoc = appDoc;
+    next();
+  } catch (err) {
+    console.error("[appVerify] Error:", err);
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
+}
