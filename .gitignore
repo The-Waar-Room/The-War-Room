@@ -8,7 +8,8 @@ admin-panel/.vercel/
 admin-panel/coverage/
 admin-panel/*.tsbuildinfo
 admin-panel/.env
-admin-panel/.env.*
+admin-panel/.env.local
+admin-panel/.env.*.local
 !admin-panel/.env.example
 
 # =========================
@@ -20,8 +21,14 @@ backend/build/
 backend/coverage/
 backend/*.tsbuildinfo
 backend/.env
-backend/.env.*
+backend/.env.local
+backend/.env.*.local
 !backend/.env.example
+
+# =========================
+# Lock files (using pnpm — ignore npm lock)
+# =========================
+**/package-lock.json
 
 # =========================
 # Logs
@@ -31,10 +38,27 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+lerna-debug.log*
 
 # =========================
-# OS / Editor
+# OS / Editor / IDE
 # =========================
 .DS_Store
+Thumbs.db
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
+
+# =========================
+# Secrets / Keys (safety net)
+# =========================
+*.pem
+*.p12
+*.jks
+*.keystore
+*-service-account*.json
+*-credentials*.json
+firebase-debug.log
+.firebase/
