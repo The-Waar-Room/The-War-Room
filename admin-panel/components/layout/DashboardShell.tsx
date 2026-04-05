@@ -1,16 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense } from "react";
 import Sidebar from "@/components/layout/Sidebar";
 import Header from "@/components/layout/Header";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { useSelectedApp } from "@/hooks/useSelectedApp";
 
-export default function DashboardShell({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  const [selectedApp, setSelectedApp] = useState("all");
+function ShellInner({ children }: { children: React.ReactNode }) {
+  const { selectedApp, setSelectedApp } = useSelectedApp();
 
   return (
     <TooltipProvider>
@@ -24,5 +21,17 @@ export default function DashboardShell({
         </div>
       </div>
     </TooltipProvider>
+  );
+}
+
+export default function DashboardShell({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <Suspense>
+      <ShellInner>{children}</ShellInner>
+    </Suspense>
   );
 }

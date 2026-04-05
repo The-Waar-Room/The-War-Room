@@ -10,6 +10,25 @@ interface VerifyResult {
   status: string;
 }
 
+/** Fire-and-forget subscription lifecycle event */
+function logSubscriptionEvent(
+  userId: string,
+  appId: string,
+  eventType: "verify_success" | "verify_failed" | "status_check" | "plan_transition",
+  metadata: Record<string, unknown>
+): void {
+  const db = getFirestore();
+  db.collection("subscription_events")
+    .add({
+      user_id: userId,
+      app_id: appId,
+      event_type: eventType,
+      ...metadata,
+      created_at: FieldValue.serverTimestamp(),
+    })
+    .catch((err) => console.error("[subscriptionEvent] write failed:", err));
+}
+
 /**
  * Verify a Google Play subscription purchase server-side.
  * - Calls androidpublisher.purchases.subscriptions.get
@@ -42,6 +61,11 @@ export async function verifyGooglePlaySubscription(
 
   // paymentState: 0 = pending, 1 = received, 2 = free trial, 3 = deferred
   if (purchaseData.paymentState !== 1 && purchaseData.paymentState !== 2) {
+    logSubscriptionEvent(userId, appId, "verify_failed", {
+      product_id: productId,
+      reason: "payment_not_received",
+      payment_state: purchaseData.paymentState,
+    });
     return {
       success: false,
       plan_type: "free",
@@ -92,6 +116,13 @@ export async function verifyGooglePlaySubscription(
   } else {
     await existing.docs[0].ref.update(subData);
   }
+
+  logSubscriptionEvent(userId, appId, "verify_success", {
+    plan_type: mapping.plan,
+    product_id: productId,
+    expires_at: expiresAt.toISOString(),
+    is_new: existing.empty,
+  });
 
   return {
     success: true,

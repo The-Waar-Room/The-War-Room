@@ -1,10 +1,12 @@
 import { Router, Response } from "express";
+import { createHash } from "crypto";
 import { appVerify } from "../middleware/appVerify";
 import { authMiddleware } from "../middleware/authMiddleware";
 import { killSwitch } from "../middleware/killSwitch";
 import { rateLimiter } from "../middleware/rateLimiter";
 import { chat } from "../services/geminiService";
 import { trackUsage } from "../services/usageService";
+import { writeChatEvent } from "../services/chatEventService";
 import { AuthenticatedRequest, ChatRequestBody } from "../types";
 
 export const chatRouter = Router();
@@ -43,6 +45,13 @@ chatRouter.post(
       const appName = req.appDoc!.app_name;
       const planType = req.planType!;
       const planLimits = req.planLimits!;
+
+      // ── Prepare context snapshot + hash for analytics ──
+      const contextJson = context ? JSON.stringify(context) : "";
+      const contextPreview = contextJson.slice(0, 512);
+      const contextHash = createHash("sha256").update(contextJson).digest("hex");
+
+      const requestStart = Date.now();
 
       // ── Call Gemini ──
       const result = await chat({
@@ -90,6 +99,22 @@ chatRouter.post(
         response: result.response,
         usage,
       });
+
+      // ── Fire-and-forget: write chat event for admin drilldown ──
+      writeChatEvent({
+        userId,
+        appId,
+        sessionId,
+        prompt: message,
+        response: result.response,
+        contextPreview,
+        contextHash,
+        tokenInput: result.tokenInput,
+        tokenOutput: result.tokenOutput,
+        planType,
+        status: "success",
+        latencyMs: Date.now() - requestStart,
+      }).catch((err: unknown) => console.error("[chat] writeChatEvent failed:", err));
     } catch (err) {
       console.error("[chat] Error:", err);
       res.status(500).json({ success: false, error: "Internal server error" });

@@ -183,3 +183,104 @@ adminRouter.post("/kill-switch", async (req: Request, res: Response): Promise<vo
     res.status(500).json({ success: false, error: "Internal server error" });
   }
 });
+
+/**
+ * GET /api/admin/users/:uid/messages
+ * Paginated chat events for a specific user.
+ * Query params: app_id, from (ISO date), to (ISO date), status, limit, offset
+ */
+adminRouter.get("/users/:uid/messages", async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { uid } = req.params;
+    const db = getFirestore();
+
+    const appId = req.query.app_id as string | undefined;
+    const from = req.query.from as string | undefined;
+    const to = req.query.to as string | undefined;
+    const status = req.query.status as string | undefined;
+    const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+    const offset = parseInt(req.query.offset as string) || 0;
+
+    let query: FirebaseFirestore.Query = db.collection("chat_events").where("user_id", "==", uid);
+
+    if (appId) query = query.where("app_id", "==", appId);
+    if (status) query = query.where("status", "==", status);
+    if (from) query = query.where("created_at", ">=", new Date(from));
+    if (to) query = query.where("created_at", "<=", new Date(to));
+
+    query = query.orderBy("created_at", "desc").offset(offset).limit(limit);
+
+    const snap = await query.get();
+    const messages = snap.docs.map((doc) => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        ...data,
+        created_at: data.created_at?.toDate?.()?.toISOString() ?? null,
+        expires_at: data.expires_at?.toDate?.()?.toISOString?.() ?? data.expires_at,
+      };
+    });
+
+    res.json({ success: true, data: messages, count: messages.length });
+  } catch (err) {
+    console.error("[admin/users/:uid/messages] Error:", err);
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
+});
+
+/**
+ * GET /api/admin/users/:uid/message-stats
+ * Aggregated message stats for a specific user: total tokens, cost, avg, error rate.
+ */
+adminRouter.get("/users/:uid/message-stats", async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { uid } = req.params;
+    const db = getFirestore();
+    const appId = req.query.app_id as string | undefined;
+
+    let query: FirebaseFirestore.Query = db.collection("chat_events").where("user_id", "==", uid);
+
+    if (appId) query = query.where("app_id", "==", appId);
+
+    // Fetch last 30 days of events for aggregation
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    query = query.where("created_at", ">=", thirtyDaysAgo);
+
+    const snap = await query.get();
+
+    let totalMessages = 0;
+    let totalTokenInput = 0;
+    let totalTokenOutput = 0;
+    let totalCostUsd = 0;
+    let totalLatencyMs = 0;
+    let errors = 0;
+
+    snap.docs.forEach((doc) => {
+      const d = doc.data();
+      totalMessages++;
+      totalTokenInput += d.token_input || 0;
+      totalTokenOutput += d.token_output || 0;
+      totalCostUsd += d.cost_usd || 0;
+      totalLatencyMs += d.latency_ms || 0;
+      if (d.status === "error") errors++;
+    });
+
+    res.json({
+      success: true,
+      data: {
+        totalMessages,
+        totalTokenInput,
+        totalTokenOutput,
+        totalCostUsd,
+        avgTokensPerRequest:
+          totalMessages > 0 ? Math.round((totalTokenInput + totalTokenOutput) / totalMessages) : 0,
+        avgLatencyMs: totalMessages > 0 ? Math.round(totalLatencyMs / totalMessages) : 0,
+        errorRate: totalMessages > 0 ? +(errors / totalMessages).toFixed(4) : 0,
+        errors,
+      },
+    });
+  } catch (err) {
+    console.error("[admin/users/:uid/message-stats] Error:", err);
+    res.status(500).json({ success: false, error: "Internal server error" });
+  }
+});

@@ -102,6 +102,11 @@ export async function getDashboardSummary(
   const today = new Date();
   const todayKey = toDateKey(today);
 
+  // Date range for messagesByDay: last 30 days
+  const thirtyDaysAgo = new Date(today);
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29);
+  const thirtyDaysAgoKey = toDateKey(thirtyDaysAgo);
+
   const usersQuery =
     appId === "all"
       ? adminDb.collection("users")
@@ -115,46 +120,79 @@ export async function getDashboardSummary(
           .where("status", "==", "active")
           .where("app_id", "==", appId);
 
-  const usageQuery =
-    appId === "all"
-      ? adminDb.collection("ai_usage").where("date", "==", todayKey)
-      : adminDb
-          .collection("ai_usage")
-          .where("date", "==", todayKey)
-          .where("app_id", "==", appId);
+  // Fetch last 30 days of usage for messagesByDay chart
+  let usageLast30Query: FirebaseFirestore.Query =
+    adminDb.collection("ai_usage");
+  if (appId !== "all") {
+    usageLast30Query = usageLast30Query.where("app_id", "==", appId);
+  }
+  usageLast30Query = usageLast30Query
+    .where("date", ">=", thirtyDaysAgoKey)
+    .orderBy("date", "desc")
+    .limit(5000);
 
-  const [usersCountSnap, activeSubsSnap, usageSnap] = await Promise.all([
+  const [usersCountSnap, activeSubsSnap, usageLast30Snap] = await Promise.all([
     usersQuery.count().get(),
     subsQuery.count().get(),
-    usageQuery.get(),
+    usageLast30Query.get(),
   ]);
 
   let messagesToday = 0;
   let aiCostUsd = 0;
-  for (const doc of usageSnap.docs) {
+  const messagesByDayMap: Record<string, number> = {};
+
+  for (const doc of usageLast30Snap.docs) {
     const data = doc.data();
-    messagesToday += Number(data.message_count || 0);
-    aiCostUsd += Number(data.cost_usd || 0);
+    const date = data.date as string;
+    const count = Number(data.message_count || 0);
+    const cost = Number(data.cost_usd || 0);
+
+    messagesByDayMap[date] = (messagesByDayMap[date] || 0) + count;
+
+    if (date === todayKey) {
+      messagesToday += count;
+      aiCostUsd += cost;
+    }
   }
 
+  // Build messagesByDay array sorted ascending
+  const messagesByDay = Object.entries(messagesByDayMap)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, value]) => ({ date, value }));
+
+  // Revenue by month: last 6 months
   const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+  const sixMonthsAgo = new Date(today.getFullYear(), today.getMonth() - 5, 1);
+
   const monthSubsQuery =
     appId === "all"
-      ? adminDb.collection("subscriptions").where("status", "==", "active")
-      : adminDb
-          .collection("subscriptions")
-          .where("status", "==", "active")
-          .where("app_id", "==", appId);
+      ? adminDb.collection("subscriptions")
+      : adminDb.collection("subscriptions").where("app_id", "==", appId);
 
-  const monthSubs = await monthSubsQuery.get();
+  const allSubs = await monthSubsQuery.get();
+  const revenueByMonthMap: Record<string, number> = {};
   let revenueMonthInr = 0;
-  monthSubs.docs.forEach((doc) => {
+
+  allSubs.docs.forEach((doc) => {
     const data = doc.data();
-    const createdAt = data.verified_at?.toDate?.() || monthStart;
-    if (createdAt >= monthStart) {
-      revenueMonthInr += Number(data.price_inr || 0);
+    const verifiedAt = data.verified_at?.toDate?.();
+    if (!verifiedAt) return;
+    const priceInr = Number(data.price_inr || 0);
+
+    if (verifiedAt >= sixMonthsAgo) {
+      const monthKey = `${verifiedAt.getFullYear()}-${String(verifiedAt.getMonth() + 1).padStart(2, "0")}`;
+      revenueByMonthMap[monthKey] =
+        (revenueByMonthMap[monthKey] || 0) + priceInr;
+    }
+
+    if (verifiedAt >= monthStart) {
+      revenueMonthInr += priceInr;
     }
   });
+
+  const revenueByMonth = Object.entries(revenueByMonthMap)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([month, value]) => ({ month, value }));
 
   const aiCostInr = aiCostUsd * INR_RATE;
   const infraCostInr = 0;
@@ -168,8 +206,8 @@ export async function getDashboardSummary(
     aiCostInr,
     revenueMonthInr,
     profitInr,
-    messagesByDay: [],
-    revenueByMonth: [],
+    messagesByDay,
+    revenueByMonth,
     updatedAt: new Date().toISOString(),
   };
 }
@@ -542,7 +580,7 @@ export async function getCloudUsageSummary(
   const estimatedMemoryGbSeconds = cloudRunRequests * 0.256; // 256MB per request
   const requestCostUsd = cloudRunRequests * 0.0000004; // $0.40/million
   const computeCostUsd =
-    estimatedCpuSeconds * 0.0000240 + estimatedMemoryGbSeconds * 0.0000025;
+    estimatedCpuSeconds * 0.000024 + estimatedMemoryGbSeconds * 0.0000025;
   const cloudRunCost = requestCostUsd + computeCostUsd;
 
   const totalCostUsd = totalVertexCost + firestoreCost + cloudRunCost;
@@ -576,7 +614,10 @@ export async function getCloudUsageSummary(
 
   const cloudRunDaily = sortedDays.map(([date, d]) => ({
     date,
-    cost: d.messages * 0.0000004 + d.messages * 0.5 * 0.000024 + d.messages * 0.256 * 0.0000025,
+    cost:
+      d.messages * 0.0000004 +
+      d.messages * 0.5 * 0.000024 +
+      d.messages * 0.256 * 0.0000025,
     requests: d.messages,
   }));
 
@@ -676,13 +717,10 @@ export async function updateBudgets(budgets: {
   firebase: number;
 }) {
   const { FieldValue } = await import("firebase-admin/firestore");
-  await adminDb
-    .collection("config")
-    .doc("global")
-    .update({
-      budgets,
-      _updated_at: FieldValue.serverTimestamp(),
-    });
+  await adminDb.collection("config").doc("global").update({
+    budgets,
+    _updated_at: FieldValue.serverTimestamp(),
+  });
 }
 
 // ── Admins ──
@@ -695,4 +733,197 @@ export async function getAdminsList(): Promise<
     email: doc.id,
     role: doc.data().role || "viewer",
   }));
+}
+
+// ── Chat Events (per-request drilldown) ──
+
+export interface ChatEventInfo {
+  id: string;
+  user_id: string;
+  app_id: string;
+  session_id: string;
+  prompt: string;
+  response: string;
+  context_preview: string;
+  context_hash: string;
+  token_input: number;
+  token_output: number;
+  cost_usd: number;
+  plan_type: string;
+  status: string;
+  latency_ms: number;
+  created_at?: string;
+}
+
+export interface UserMessageStats {
+  totalMessages: number;
+  totalTokenInput: number;
+  totalTokenOutput: number;
+  totalCostUsd: number;
+  avgTokensPerRequest: number;
+  avgLatencyMs: number;
+  errorRate: number;
+  errors: number;
+}
+
+/**
+ * Get paginated chat events for a user.
+ * Masks prompt/response for 'viewer' role.
+ */
+export async function getUserMessages(
+  uid: string,
+  role: AdminRole,
+  limit = 50,
+  offset = 0
+): Promise<{ messages: ChatEventInfo[]; total: number }> {
+  const baseQuery = adminDb
+    .collection("chat_events")
+    .where("user_id", "==", uid);
+
+  const countSnap = await baseQuery.count().get();
+  const total = countSnap.data().count;
+
+  const snap = await baseQuery
+    .orderBy("created_at", "desc")
+    .offset(offset)
+    .limit(limit)
+    .get();
+
+  const maskContent = role === "viewer";
+
+  const messages: ChatEventInfo[] = snap.docs.map((doc) => {
+    const d = doc.data();
+    return {
+      id: doc.id,
+      user_id: d.user_id,
+      app_id: d.app_id,
+      session_id: d.session_id,
+      prompt: maskContent ? "[masked]" : d.prompt,
+      response: maskContent ? "[masked]" : d.response,
+      context_preview: maskContent ? "[masked]" : d.context_preview || "",
+      context_hash: d.context_hash || "",
+      token_input: d.token_input || 0,
+      token_output: d.token_output || 0,
+      cost_usd: d.cost_usd || 0,
+      plan_type: d.plan_type || "free",
+      status: d.status || "success",
+      latency_ms: d.latency_ms || 0,
+      created_at: d.created_at?.toDate?.()?.toISOString() ?? null,
+    };
+  });
+
+  return { messages, total };
+}
+
+/**
+ * Get aggregated message stats for a user (last 30 days).
+ */
+export async function getUserMessageStats(
+  uid: string
+): Promise<UserMessageStats> {
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+  const snap = await adminDb
+    .collection("chat_events")
+    .where("user_id", "==", uid)
+    .where("created_at", ">=", thirtyDaysAgo)
+    .get();
+
+  let totalMessages = 0;
+  let totalTokenInput = 0;
+  let totalTokenOutput = 0;
+  let totalCostUsd = 0;
+  let totalLatencyMs = 0;
+  let errors = 0;
+
+  snap.docs.forEach((doc) => {
+    const d = doc.data();
+    totalMessages++;
+    totalTokenInput += d.token_input || 0;
+    totalTokenOutput += d.token_output || 0;
+    totalCostUsd += d.cost_usd || 0;
+    totalLatencyMs += d.latency_ms || 0;
+    if (d.status === "error") errors++;
+  });
+
+  return {
+    totalMessages,
+    totalTokenInput,
+    totalTokenOutput,
+    totalCostUsd,
+    avgTokensPerRequest:
+      totalMessages > 0
+        ? Math.round((totalTokenInput + totalTokenOutput) / totalMessages)
+        : 0,
+    avgLatencyMs:
+      totalMessages > 0 ? Math.round(totalLatencyMs / totalMessages) : 0,
+    errorRate: totalMessages > 0 ? +(errors / totalMessages).toFixed(4) : 0,
+    errors,
+  };
+}
+
+// ── Dashboard: Top Users by Cost ──
+
+export interface TopUserByCost {
+  user_id: string;
+  email: string;
+  totalCostUsd: number;
+  messageCount: number;
+}
+
+export async function getTopUsersByCost(
+  appId: string = "all",
+  days = 30,
+  limit = 10
+): Promise<TopUserByCost[]> {
+  const dates: string[] = [];
+  for (let i = 0; i < days; i++) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    dates.push(d.toISOString().slice(0, 10));
+  }
+
+  let query: FirebaseFirestore.Query = adminDb.collection("ai_usage");
+  if (appId !== "all") {
+    query = query.where("app_id", "==", appId);
+  }
+  query = query
+    .where("date", ">=", dates[dates.length - 1])
+    .orderBy("date", "desc")
+    .limit(5000);
+
+  const snap = await query.get();
+
+  const byUser: Record<string, { cost: number; messages: number }> = {};
+  for (const doc of snap.docs) {
+    const d = doc.data();
+    const uid = d.user_id;
+    if (!byUser[uid]) byUser[uid] = { cost: 0, messages: 0 };
+    byUser[uid].cost += d.cost_usd || 0;
+    byUser[uid].messages += d.message_count || 0;
+  }
+
+  const sorted = Object.entries(byUser)
+    .sort(([, a], [, b]) => b.cost - a.cost)
+    .slice(0, limit);
+
+  // Batch-fetch user emails
+  const results: TopUserByCost[] = [];
+  for (const [uid, stats] of sorted) {
+    let email = uid;
+    try {
+      const userDoc = await adminDb.collection("users").doc(uid).get();
+      if (userDoc.exists) email = userDoc.data()?.email || uid;
+    } catch {
+      // use uid as fallback
+    }
+    results.push({
+      user_id: uid,
+      email,
+      totalCostUsd: stats.cost,
+      messageCount: stats.messages,
+    });
+  }
+
+  return results;
 }

@@ -20,6 +20,7 @@ import type {
   SubscriptionInfo,
   AiUsageRecord,
 } from "@/lib/firestore";
+import UserMessages from "@/components/users/UserMessages";
 import Link from "next/link";
 import { ArrowLeft, Ban, ShieldCheck } from "lucide-react";
 
@@ -49,6 +50,9 @@ export default function UserDetail({ uid }: UserDetailProps) {
     `/api/admin/users/${uid}`
   );
   const [acting, setActing] = useState(false);
+  const [activeTab, setActiveTab] = useState<
+    "messages" | "subscriptions" | "usage"
+  >("messages");
 
   async function toggleBan() {
     if (!data?.user || acting) return;
@@ -161,8 +165,30 @@ export default function UserDetail({ uid }: UserDetailProps) {
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        {/* Subscriptions */}
+      {/* Tabs */}
+      <div className="flex gap-1 rounded-lg bg-muted p-1">
+        {(["messages", "subscriptions", "usage"] as const).map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+              activeTab === tab
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {tab === "messages"
+              ? "Messages"
+              : tab === "subscriptions"
+                ? "Subscriptions"
+                : "AI Usage (30d)"}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === "messages" && <UserMessages uid={uid} />}
+
+      {activeTab === "subscriptions" && (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
@@ -198,8 +224,9 @@ export default function UserDetail({ uid }: UserDetailProps) {
             )}
           </CardContent>
         </Card>
+      )}
 
-        {/* AI Usage */}
+      {activeTab === "usage" && (
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
@@ -245,7 +272,7 @@ export default function UserDetail({ uid }: UserDetailProps) {
             )}
           </CardContent>
         </Card>
-      </div>
+      )}
     </section>
   );
 }

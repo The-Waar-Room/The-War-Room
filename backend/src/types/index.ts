@@ -120,3 +120,37 @@ export interface SubscriptionVerifyBody {
   productId: string;
   packageName: string;
 }
+
+// ── Chat event (per-request analytics, 30-day TTL) ──
+
+export interface ChatEventDoc {
+  user_id: string;
+  app_id: string;
+  session_id: string;
+  prompt: string;
+  response: string;
+  context_preview: string; // first 512 chars of context JSON
+  context_hash: string; // SHA-256 of full context JSON
+  token_input: number;
+  token_output: number;
+  cost_usd: number;
+  plan_type: PlanType;
+  status: "success" | "error";
+  latency_ms: number;
+  created_at: FirebaseFirestore.Timestamp;
+  expires_at: Date; // 30-day TTL field for Firestore
+}
+
+// ── Subscription lifecycle event ──
+
+export interface SubscriptionEventDoc {
+  user_id: string;
+  app_id: string;
+  event_type: "verify_success" | "verify_failed" | "status_check" | "plan_transition";
+  plan_type: string;
+  product_id?: string;
+  old_status?: string;
+  new_status?: string;
+  metadata?: Record<string, unknown>;
+  created_at: FirebaseFirestore.Timestamp;
+}

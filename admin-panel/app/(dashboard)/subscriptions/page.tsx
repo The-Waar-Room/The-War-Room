@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/table";
 import StatCard from "@/components/dashboard/StatCard";
 import type { SubscriptionInfo } from "@/lib/firestore";
+import { useSelectedApp } from "@/hooks/useSelectedApp";
 import { CheckCircle, ListTodo, BarChart3 } from "lucide-react";
 
 interface SubsResponse {
@@ -34,8 +35,10 @@ function ts(seconds?: number) {
 }
 
 export default function SubscriptionsPage() {
+  const { selectedApp } = useSelectedApp();
+  const appParam = selectedApp !== "all" ? `?app=${selectedApp}` : "";
   const { data, isLoading, error } = useFirestore<SubsResponse>(
-    "/api/admin/subscriptions",
+    `/api/admin/subscriptions${appParam}`,
     30000
   );
 

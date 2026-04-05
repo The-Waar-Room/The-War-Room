@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { getDashboardSummary } from "@/lib/firestore";
+import { getDashboardSummary, getTopUsersByCost } from "@/lib/firestore";
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -14,7 +14,11 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url);
   const appId = searchParams.get("app") || "all";
-  const summary = await getDashboardSummary(appId);
 
-  return NextResponse.json({ summary });
+  const [summary, topUsers] = await Promise.all([
+    getDashboardSummary(appId),
+    getTopUsersByCost(appId, 30, 5),
+  ]);
+
+  return NextResponse.json({ summary, topUsers });
 }

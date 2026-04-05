@@ -27,6 +27,7 @@ import {
   ArrowDownToLine,
   ArrowUpFromLine,
 } from "lucide-react";
+import { useSelectedApp } from "@/hooks/useSelectedApp";
 
 const INR_RATE = 84;
 
@@ -56,8 +57,10 @@ function inr(v: number) {
 }
 
 export default function AiUsagePage() {
+  const { selectedApp } = useSelectedApp();
+  const appParam = selectedApp !== "all" ? `&app=${selectedApp}` : "";
   const { data, isLoading, error } = useFirestore<UsageSummary>(
-    "/api/admin/ai-usage?days=30",
+    `/api/admin/ai-usage?days=30${appParam}`,
     30000
   );
 

@@ -15,6 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { UserInfo } from "@/lib/firestore";
+import { useSelectedApp } from "@/hooks/useSelectedApp";
 import Link from "next/link";
 
 const PAGE_SIZE = 25;
@@ -29,13 +30,15 @@ function ts(seconds?: number) {
 }
 
 export default function UsersPage() {
+  const { selectedApp } = useSelectedApp();
   const [offset, setOffset] = useState(0);
   const [search, setSearch] = useState("");
 
+  const appParam = selectedApp !== "all" ? `&app=${selectedApp}` : "";
   const { data, isLoading, error } = useFirestore<{
     users: UserInfo[];
     total: number;
-  }>(`/api/admin/users?limit=${PAGE_SIZE}&offset=${offset}`, 30000);
+  }>(`/api/admin/users?limit=${PAGE_SIZE}&offset=${offset}${appParam}`, 30000);
 
   const filtered = data?.users?.filter(
     (u) =>

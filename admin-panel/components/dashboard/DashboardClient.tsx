@@ -14,11 +14,14 @@ import MessagesChart from "@/components/dashboard/MessagesChart";
 import RevenueChart from "@/components/dashboard/RevenueChart";
 import StatCard from "@/components/dashboard/StatCard";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useFirestore } from "@/hooks/useFirestore";
-import type { DashboardSummary } from "@/lib/firestore";
+import { useSelectedApp } from "@/hooks/useSelectedApp";
+import type { DashboardSummary, TopUserByCost } from "@/lib/firestore";
 
 interface DashboardResponse {
   summary: DashboardSummary;
+  topUsers: TopUserByCost[];
 }
 
 function inr(value: number) {
@@ -63,8 +66,10 @@ function DashboardSkeleton() {
 }
 
 export default function DashboardClient() {
+  const { selectedApp } = useSelectedApp();
+  const appParam = selectedApp !== "all" ? `?app=${selectedApp}` : "";
   const { data, isLoading, error } = useFirestore<DashboardResponse>(
-    "/api/admin/dashboard",
+    `/api/admin/dashboard${appParam}`,
     60000
   );
   const [secondsAgo, setSecondsAgo] = useState(0);
@@ -191,6 +196,46 @@ export default function DashboardClient() {
           }
         />
       </div>
+
+      {/* Top Users by Cost */}
+      {data.topUsers && data.topUsers.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              Top Users by AI Cost (30d)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {data.topUsers.map((user, i) => (
+                <div
+                  key={user.user_id}
+                  className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                      {i + 1}
+                    </span>
+                    <div>
+                      <p className="text-sm font-medium">
+                        {user.email.length > 30
+                          ? user.email.slice(0, 27) + "…"
+                          : user.email}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {user.messageCount.toLocaleString()} messages
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-sm font-bold tabular-nums text-amber-600">
+                    {usd(user.totalCostUsd)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </section>
   );
 }
