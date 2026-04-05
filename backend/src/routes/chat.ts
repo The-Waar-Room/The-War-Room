@@ -53,7 +53,8 @@ chatRouter.post(
         message,
         context,
         planType,
-        maxContextChars: planLimits.max_context_chars,
+        maxInputTokens: planLimits.max_input_tokens,
+        maxOutputTokens: planLimits.max_output_tokens,
         history,
       });
 

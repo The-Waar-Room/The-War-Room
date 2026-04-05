@@ -2,7 +2,7 @@ import { Response, NextFunction } from "express";
 import { getRedis } from "../config/redis";
 import { getGlobalConfig } from "../config/configCache";
 import { getFirestore } from "../config/firebase";
-import { AuthenticatedRequest, PlanType } from "../types";
+import { AuthenticatedRequest, PlanType, toConfigPlan } from "../types";
 
 /**
  * Middleware 4: Rate limiting via Upstash Redis.
@@ -26,7 +26,8 @@ export async function rateLimiter(
     // Determine user's plan
     const planType = await getUserPlan(userId, appId);
     const config = await getGlobalConfig();
-    const planLimits = config.plans[planType];
+    const configPlan = toConfigPlan(planType);
+    const planLimits = config.plans[configPlan];
 
     if (!planLimits) {
       res.status(500).json({ success: false, error: "Internal server error" });

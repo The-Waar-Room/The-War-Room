@@ -50,17 +50,24 @@ export interface ChatHistoryMessage {
 
 export interface PlanLimits {
   daily_messages: number;
-  max_context_chars: number;
+  max_input_tokens: number;
+  max_output_tokens: number;
 }
 
 export interface GlobalConfig {
   kill_switch: boolean;
-  plans: Record<PlanType, PlanLimits>;
+  plans: Record<ConfigPlanKey, PlanLimits>;
 }
 
 // ── Plan & subscription types ──
 
 export type PlanType = "free" | "monthly" | "sixmonth" | "yearly";
+export type ConfigPlanKey = "free" | "premium";
+
+/** Maps a subscription plan type to the config plan key for limit lookups */
+export function toConfigPlan(planType: PlanType): ConfigPlanKey {
+  return planType === "free" ? "free" : "premium";
+}
 
 export const PRODUCT_TO_PLAN: Record<string, { plan: PlanType; days: number }> = {
   "premium-monthly": { plan: "monthly", days: 30 },

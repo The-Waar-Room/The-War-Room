@@ -51,7 +51,14 @@ export interface AiUsageRecord {
 
 export interface GlobalConfig {
   kill_switch: boolean;
-  plans: Record<string, { daily_messages: number; max_context_chars: number }>;
+  plans: Record<
+    string,
+    {
+      daily_messages: number;
+      max_input_tokens: number;
+      max_output_tokens: number;
+    }
+  >;
   _updated_at?: { _seconds: number };
 }
 
@@ -525,7 +532,11 @@ export async function updateKillSwitch(enabled: boolean) {
 
 export async function updatePlanLimits(
   plan: string,
-  limits: { daily_messages: number; max_context_chars: number }
+  limits: {
+    daily_messages: number;
+    max_input_tokens: number;
+    max_output_tokens: number;
+  }
 ) {
   const { FieldValue } = await import("firebase-admin/firestore");
   await adminDb

@@ -9,7 +9,8 @@ interface GeminiChatParams {
   message: string;
   context: Record<string, unknown> | undefined;
   planType: PlanType;
-  maxContextChars: number;
+  maxInputTokens: number;
+  maxOutputTokens: number;
   history?: ChatHistoryMessage[];
 }
 
@@ -24,9 +25,10 @@ interface GeminiChatResult {
  * and returns the AI response with token counts.
  */
 export async function chat(params: GeminiChatParams): Promise<GeminiChatResult> {
-  const { appName, message, context, planType, maxContextChars, history } = params;
+  const { appName, message, context, planType, maxInputTokens, maxOutputTokens, history } = params;
 
   // ── Build system prompt ──
+  const maxContextChars = maxInputTokens * 4; // ~4 chars per token
   const contextStr = context ? JSON.stringify(context).slice(0, maxContextChars) : "";
 
   const wordLimit = planType === "free" ? "\nKeep responses under 100 words." : "";
@@ -54,6 +56,9 @@ ${contextStr}
   const result = await model.generateContent({
     systemInstruction: { role: "system", parts: [{ text: systemPrompt }] },
     contents,
+    generationConfig: {
+      maxOutputTokens,
+    },
   });
 
   const response = result.response;

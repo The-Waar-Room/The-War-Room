@@ -58,7 +58,11 @@ export default function SettingsPage() {
 
   async function savePlanLimits(
     plan: string,
-    limits: { daily_messages: number; max_context_chars: number }
+    limits: {
+      daily_messages: number;
+      max_input_tokens: number;
+      max_output_tokens: number;
+    }
   ) {
     setSaving(plan);
     try {
@@ -154,7 +158,8 @@ export default function SettingsPage() {
                 key={plan}
                 plan={plan}
                 dailyMessages={limits.daily_messages}
-                maxContextChars={limits.max_context_chars}
+                maxInputTokens={limits.max_input_tokens}
+                maxOutputTokens={limits.max_output_tokens}
                 saving={saving === plan}
                 onSave={(updated) => savePlanLimits(plan, updated)}
               />
@@ -207,22 +212,29 @@ export default function SettingsPage() {
 function PlanLimitRow({
   plan,
   dailyMessages,
-  maxContextChars,
+  maxInputTokens,
+  maxOutputTokens,
   saving,
   onSave,
 }: {
   plan: string;
   dailyMessages: number;
-  maxContextChars: number;
+  maxInputTokens: number;
+  maxOutputTokens: number;
   saving: boolean;
   onSave: (limits: {
     daily_messages: number;
-    max_context_chars: number;
+    max_input_tokens: number;
+    max_output_tokens: number;
   }) => void;
 }) {
   const [msgs, setMsgs] = useState(dailyMessages);
-  const [ctx, setCtx] = useState(maxContextChars);
-  const dirty = msgs !== dailyMessages || ctx !== maxContextChars;
+  const [inTok, setInTok] = useState(maxInputTokens);
+  const [outTok, setOutTok] = useState(maxOutputTokens);
+  const dirty =
+    msgs !== dailyMessages ||
+    inTok !== maxInputTokens ||
+    outTok !== maxOutputTokens;
 
   return (
     <div className="flex flex-wrap items-end gap-3 rounded-lg bg-muted/50 px-3 py-3">
@@ -245,12 +257,23 @@ function PlanLimitRow({
       </div>
       <div>
         <label className="text-[10px] uppercase tracking-wider text-muted-foreground">
-          Max Context
+          Max Input Tokens
         </label>
         <Input
           type="number"
-          value={ctx}
-          onChange={(e) => setCtx(Number(e.target.value))}
+          value={inTok}
+          onChange={(e) => setInTok(Number(e.target.value))}
+          className="mt-0.5 h-8 w-28 tabular-nums"
+        />
+      </div>
+      <div>
+        <label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+          Max Output Tokens
+        </label>
+        <Input
+          type="number"
+          value={outTok}
+          onChange={(e) => setOutTok(Number(e.target.value))}
           className="mt-0.5 h-8 w-28 tabular-nums"
         />
       </div>
@@ -258,7 +281,11 @@ function PlanLimitRow({
         <Button
           size="sm"
           onClick={() =>
-            onSave({ daily_messages: msgs, max_context_chars: ctx })
+            onSave({
+              daily_messages: msgs,
+              max_input_tokens: inTok,
+              max_output_tokens: outTok,
+            })
           }
           disabled={saving}
         >

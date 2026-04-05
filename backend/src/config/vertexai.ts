@@ -15,9 +15,7 @@ export function initVertexAI(): void {
   model = vertexAI.getGenerativeModel({
     model: "gemini-2.5-flash",
     generationConfig: {
-      maxOutputTokens: 1024,
       temperature: 0.7,
-      // Thinking disabled — standard mode only (cost control)
     },
   });
 
