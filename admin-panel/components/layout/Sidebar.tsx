@@ -26,7 +26,7 @@ const items = [
   { href: "/users", label: "Users", icon: Users },
   { href: "/subscriptions", label: "Subs", icon: CreditCard },
   { href: "/ai-usage", label: "AI Usage", icon: Bot },
-  { href: "/cloud-usage", label: "Cloud", icon: Cloud },
+  { href: "/cloud-usage", label: "Budget", icon: Cloud },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 

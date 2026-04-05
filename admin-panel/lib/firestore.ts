@@ -484,9 +484,9 @@ export async function getCloudUsageSummary(
 
   const config = configDoc.data() as GlobalConfig | undefined;
   const budgets = config?.budgets ?? {
-    vertex_ai: 10,
-    cloud_run: 5,
-    firebase: 5,
+    vertex_ai: 40,
+    cloud_run: 10,
+    firebase: 10,
   };
 
   let totalMessages = 0;
