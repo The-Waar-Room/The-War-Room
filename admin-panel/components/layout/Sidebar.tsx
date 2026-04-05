@@ -8,6 +8,7 @@ import {
   Users,
   CreditCard,
   Bot,
+  Cloud,
   Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -25,6 +26,7 @@ const items = [
   { href: "/users", label: "Users", icon: Users },
   { href: "/subscriptions", label: "Subs", icon: CreditCard },
   { href: "/ai-usage", label: "AI Usage", icon: Bot },
+  { href: "/cloud-usage", label: "Cloud", icon: Cloud },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -78,7 +80,7 @@ export default function Sidebar() {
 
       {/* Mobile bottom nav */}
       <nav className="fixed bottom-0 left-0 right-0 z-20 flex justify-around border-t bg-card px-1 py-1.5 md:hidden">
-        {items.slice(0, 5).map((item) => {
+        {items.slice(0, 6).map((item) => {
           const active =
             item.href === "/"
               ? pathname === "/"
