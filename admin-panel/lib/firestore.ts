@@ -59,6 +59,11 @@ export interface GlobalConfig {
       max_output_tokens: number;
     }
   >;
+  budgets?: {
+    vertex_ai: number;
+    cloud_run: number;
+    firebase: number;
+  };
   _updated_at?: { _seconds: number };
 }
 
@@ -413,19 +418,52 @@ export interface CloudUsageSummary {
     totalMessages: number;
     totalTokenInput: number;
     totalTokenOutput: number;
+    inputCostUsd: number;
+    outputCostUsd: number;
+    avgTokensPerMessage: number;
+    dailyBreakdown: Array<{
+      date: string;
+      cost: number;
+      messages: number;
+      tokenInput: number;
+      tokenOutput: number;
+    }>;
   };
   firebase: {
     firestoreReads: number;
     firestoreWrites: number;
     authUsers: number;
+    readCostUsd: number;
+    writeCostUsd: number;
     estimatedCostUsd: number;
+    dailyBreakdown: Array<{
+      date: string;
+      cost: number;
+      reads: number;
+      writes: number;
+    }>;
   };
   cloudRun: {
     estimatedRequestCount: number;
+    estimatedCpuSeconds: number;
+    estimatedMemoryGbSeconds: number;
+    requestCostUsd: number;
+    computeCostUsd: number;
     estimatedCostUsd: number;
+    dailyBreakdown: Array<{
+      date: string;
+      cost: number;
+      requests: number;
+    }>;
+  };
+  budgets: {
+    vertex_ai: number;
+    cloud_run: number;
+    firebase: number;
   };
   totalCostUsd: number;
   totalCostInr: number;
+  daysInPeriod: number;
   dailyBreakdown: Array<{
     date: string;
     vertexAi: number;
@@ -438,14 +476,33 @@ export interface CloudUsageSummary {
 export async function getCloudUsageSummary(
   days = 30
 ): Promise<CloudUsageSummary> {
-  const records = await getAiUsageRecords(undefined, days);
+  const [records, configDoc, usersSnap] = await Promise.all([
+    getAiUsageRecords(undefined, days),
+    adminDb.collection("config").doc("global").get(),
+    adminDb.collection("users").count().get(),
+  ]);
+
+  const config = configDoc.data() as GlobalConfig | undefined;
+  const budgets = config?.budgets ?? {
+    vertex_ai: 10,
+    cloud_run: 5,
+    firebase: 5,
+  };
 
   let totalMessages = 0;
   let totalTokenInput = 0;
   let totalTokenOutput = 0;
   let totalVertexCost = 0;
 
-  const byDay: Record<string, { messages: number; vertexCost: number }> = {};
+  const byDay: Record<
+    string,
+    {
+      messages: number;
+      vertexCost: number;
+      tokenInput: number;
+      tokenOutput: number;
+    }
+  > = {};
 
   for (const r of records) {
     totalMessages += r.message_count;
@@ -453,43 +510,92 @@ export async function getCloudUsageSummary(
     totalTokenOutput += r.token_output;
     totalVertexCost += r.cost_usd;
 
-    if (!byDay[r.date]) byDay[r.date] = { messages: 0, vertexCost: 0 };
+    if (!byDay[r.date])
+      byDay[r.date] = {
+        messages: 0,
+        vertexCost: 0,
+        tokenInput: 0,
+        tokenOutput: 0,
+      };
     byDay[r.date].messages += r.message_count;
     byDay[r.date].vertexCost += r.cost_usd;
+    byDay[r.date].tokenInput += r.token_input;
+    byDay[r.date].tokenOutput += r.token_output;
   }
 
+  // Gemini 2.5 Flash pricing: $0.15/1M input, $0.60/1M output (approx)
+  const inputCostUsd = (totalTokenInput / 1_000_000) * 0.15;
+  const outputCostUsd = (totalTokenOutput / 1_000_000) * 0.6;
+
   // Firestore estimates: ~$0.06/100K reads, ~$0.18/100K writes
-  // Each chat message ≈ 3 reads (user lookup, config, usage) + 2 writes (usage upsert, log)
   const firestoreReads = totalMessages * 3;
   const firestoreWrites = totalMessages * 2;
-  const firestoreCost =
-    (firestoreReads / 100_000) * 0.06 + (firestoreWrites / 100_000) * 0.18;
+  const readCostUsd = (firestoreReads / 100_000) * 0.06;
+  const writeCostUsd = (firestoreWrites / 100_000) * 0.18;
+  const firestoreCost = readCostUsd + writeCostUsd;
 
-  // Auth users count
-  const usersSnap = await adminDb.collection("users").count().get();
   const authUsers = usersSnap.data().count;
 
-  // Cloud Run estimates: ~$0.00002/request + compute
-  const cloudRunRequests = totalMessages; // 1 request per message
-  const cloudRunCost = cloudRunRequests * 0.00004; // avg cost per request
+  // Cloud Run estimates
+  const cloudRunRequests = totalMessages;
+  const estimatedCpuSeconds = cloudRunRequests * 0.5; // ~0.5s CPU per request
+  const estimatedMemoryGbSeconds = cloudRunRequests * 0.256; // 256MB per request
+  const requestCostUsd = cloudRunRequests * 0.0000004; // $0.40/million
+  const computeCostUsd =
+    estimatedCpuSeconds * 0.0000240 + estimatedMemoryGbSeconds * 0.0000025;
+  const cloudRunCost = requestCostUsd + computeCostUsd;
 
   const totalCostUsd = totalVertexCost + firestoreCost + cloudRunCost;
+  const avgTokensPerMessage =
+    totalMessages > 0
+      ? Math.round((totalTokenInput + totalTokenOutput) / totalMessages)
+      : 0;
 
-  const dailyBreakdown = Object.entries(byDay)
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([date, data]) => {
-      const dayFirestore =
-        ((data.messages * 3) / 100_000) * 0.06 +
-        ((data.messages * 2) / 100_000) * 0.18;
-      const dayCloudRun = data.messages * 0.00004;
-      return {
-        date,
-        vertexAi: data.vertexCost,
-        firebase: dayFirestore,
-        cloudRun: dayCloudRun,
-        total: data.vertexCost + dayFirestore + dayCloudRun,
-      };
-    });
+  const sortedDays = Object.entries(byDay).sort(([a], [b]) =>
+    a.localeCompare(b)
+  );
+
+  const vertexAiDaily = sortedDays.map(([date, d]) => ({
+    date,
+    cost: d.vertexCost,
+    messages: d.messages,
+    tokenInput: d.tokenInput,
+    tokenOutput: d.tokenOutput,
+  }));
+
+  const firebaseDaily = sortedDays.map(([date, d]) => {
+    const reads = d.messages * 3;
+    const writes = d.messages * 2;
+    return {
+      date,
+      cost: (reads / 100_000) * 0.06 + (writes / 100_000) * 0.18,
+      reads,
+      writes,
+    };
+  });
+
+  const cloudRunDaily = sortedDays.map(([date, d]) => ({
+    date,
+    cost: d.messages * 0.0000004 + d.messages * 0.5 * 0.000024 + d.messages * 0.256 * 0.0000025,
+    requests: d.messages,
+  }));
+
+  const dailyBreakdown = sortedDays.map(([date, data]) => {
+    const dayFirestore =
+      ((data.messages * 3) / 100_000) * 0.06 +
+      ((data.messages * 2) / 100_000) * 0.18;
+    const dayCloudRun =
+      data.messages * 0.0000004 +
+      data.messages * 0.5 * 0.000024 +
+      data.messages * 0.256 * 0.0000025;
+    return {
+      date,
+      vertexAi: data.vertexCost,
+      firebase: dayFirestore,
+      cloudRun: dayCloudRun,
+      total: data.vertexCost + dayFirestore + dayCloudRun,
+    };
+  });
 
   return {
     vertexAi: {
@@ -497,19 +603,33 @@ export async function getCloudUsageSummary(
       totalMessages,
       totalTokenInput,
       totalTokenOutput,
+      inputCostUsd,
+      outputCostUsd,
+      avgTokensPerMessage,
+      dailyBreakdown: vertexAiDaily,
     },
     firebase: {
       firestoreReads,
       firestoreWrites,
       authUsers,
+      readCostUsd,
+      writeCostUsd,
       estimatedCostUsd: firestoreCost,
+      dailyBreakdown: firebaseDaily,
     },
     cloudRun: {
       estimatedRequestCount: cloudRunRequests,
+      estimatedCpuSeconds,
+      estimatedMemoryGbSeconds,
+      requestCostUsd,
+      computeCostUsd,
       estimatedCostUsd: cloudRunCost,
+      dailyBreakdown: cloudRunDaily,
     },
+    budgets,
     totalCostUsd,
     totalCostInr: totalCostUsd * INR_RATE,
+    daysInPeriod: days,
     dailyBreakdown,
   };
 }
@@ -544,6 +664,23 @@ export async function updatePlanLimits(
     .doc("global")
     .update({
       [`plans.${plan}`]: limits,
+      _updated_at: FieldValue.serverTimestamp(),
+    });
+}
+
+// ── Budgets ──
+
+export async function updateBudgets(budgets: {
+  vertex_ai: number;
+  cloud_run: number;
+  firebase: number;
+}) {
+  const { FieldValue } = await import("firebase-admin/firestore");
+  await adminDb
+    .collection("config")
+    .doc("global")
+    .update({
+      budgets,
       _updated_at: FieldValue.serverTimestamp(),
     });
 }

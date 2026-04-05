@@ -1,7 +1,7 @@
 import { Router, Response } from "express";
 import { FieldValue } from "firebase-admin/firestore";
 import { appVerify } from "../middleware/appVerify";
-import { authMiddleware } from "../middleware/authMiddleware";
+import { tokenAuth } from "../middleware/authMiddleware";
 import { getFirestore } from "../config/firebase";
 import { AuthenticatedRequest } from "../types";
 
@@ -10,12 +10,12 @@ export const userRouter = Router();
 /**
  * POST /api/user/register
  * Create user document in Firestore after Firebase signup.
- * Middleware: appVerify → authMiddleware
+ * Middleware: appVerify → tokenAuth
  */
 userRouter.post(
   "/register",
   appVerify,
-  authMiddleware,
+  tokenAuth,
   async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       const uid = req.decodedToken!.uid;

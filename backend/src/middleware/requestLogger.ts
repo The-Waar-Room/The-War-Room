@@ -21,7 +21,8 @@ export function requestLogger(req: Request, res: Response, next: NextFunction): 
       JSON.stringify({
         requestId,
         method: req.method,
-        path: req.path,
+        path: req.originalUrl,
+        routePath: req.path,
         status: res.statusCode,
         durationMs: duration,
         appId: extended.appId ?? null,

@@ -2,6 +2,41 @@ import { Response, NextFunction } from "express";
 import { getAuth, getFirestore } from "../config/firebase";
 import { AuthenticatedRequest, UserDoc } from "../types";
 
+async function verifyBearerToken(req: AuthenticatedRequest): Promise<void> {
+  const authHeader = req.headers.authorization;
+  if (!authHeader?.startsWith("Bearer ")) {
+    throw new Error("MISSING_OR_INVALID_TOKEN");
+  }
+
+  const token = authHeader.slice(7);
+  const decoded = await getAuth().verifyIdToken(token);
+  req.decodedToken = { uid: decoded.uid, email: decoded.email };
+}
+
+/**
+ * Verifies Firebase JWT and attaches decoded token.
+ * Use for endpoints where user doc may not exist yet (e.g. registration).
+ */
+export async function tokenAuth(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> {
+  try {
+    await verifyBearerToken(req);
+    next();
+  } catch (err: unknown) {
+    if (err instanceof Error && err.message === "MISSING_OR_INVALID_TOKEN") {
+      res.status(401).json({ success: false, error: "Missing or invalid token" });
+      return;
+    }
+
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[tokenAuth] REJECT: verifyIdToken failed — ${msg}`);
+    res.status(401).json({ success: false, error: "Authentication failed" });
+  }
+}
+
 /**
  * Middleware 2: Verify Firebase JWT token from Authorization header.
  * - Extracts Bearer token
@@ -16,20 +51,11 @@ export async function authMiddleware(
   next: NextFunction
 ): Promise<void> {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader?.startsWith("Bearer ")) {
-      res.status(401).json({ success: false, error: "Missing or invalid token" });
-      return;
-    }
-
-    const token = authHeader.slice(7);
-    const decoded = await getAuth().verifyIdToken(token);
-
-    req.decodedToken = { uid: decoded.uid, email: decoded.email };
+    await verifyBearerToken(req);
 
     // Look up user document
     const db = getFirestore();
-    const userSnap = await db.collection("users").doc(decoded.uid).get();
+    const userSnap = await db.collection("users").doc(req.decodedToken!.uid).get();
 
     if (!userSnap.exists) {
       res.status(404).json({ success: false, error: "User not registered" });
