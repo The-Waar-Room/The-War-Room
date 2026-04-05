@@ -39,7 +39,14 @@ export async function rateLimiter(
     const redisKey = `rate:${userId}:${appId}:${todayIST}`;
 
     const redis = getRedis();
-    const currentCount = (await redis.get<number>(redisKey)) ?? 0;
+    let currentCount = 0;
+    try {
+      currentCount = (await redis.get<number>(redisKey)) ?? 0;
+    } catch (err) {
+      console.error(`[rateLimiter] Redis read failed for key=${redisKey}:`, err);
+      // Fail-open for availability: allow this request if Redis is temporarily unavailable.
+      currentCount = 0;
+    }
 
     if (currentCount >= planLimits.daily_messages) {
       res.status(429).json({
@@ -72,21 +79,57 @@ async function getUserPlan(userId: string, appId: string): Promise<PlanType> {
   const db = getFirestore();
   const now = new Date();
 
-  const subSnap = await db
-    .collection("subscriptions")
-    .where("user_id", "==", userId)
-    .where("app_id", "==", appId)
-    .where("status", "==", "active")
-    .where("expires_at", ">", now)
-    .orderBy("expires_at", "desc")
-    .limit(1)
-    .get();
+  // Query by user_id only to avoid composite-index dependency in hot-path chat requests.
+  const subSnap = await db.collection("subscriptions").where("user_id", "==", userId).get();
 
   if (subSnap.empty) {
     return "free";
   }
 
-  return subSnap.docs[0].data().plan_type as PlanType;
+  const active = subSnap.docs
+    .map((doc) => doc.data() as Record<string, unknown>)
+    .filter((doc) => doc.app_id === appId && doc.status === "active")
+    .map((doc) => {
+      const expiresAt = toDate(doc.expires_at);
+      return {
+        planType: doc.plan_type as PlanType | undefined,
+        expiresAt,
+      };
+    })
+    .filter(
+      (sub): sub is { planType: PlanType | undefined; expiresAt: Date } =>
+        sub.expiresAt !== null && sub.expiresAt.getTime() > now.getTime()
+    )
+    .sort((a, b) => b.expiresAt.getTime() - a.expiresAt.getTime());
+
+  if (active.length === 0) {
+    return "free";
+  }
+
+  return active[0].planType ?? "free";
+}
+
+function toDate(value: unknown): Date | null {
+  if (!value) return null;
+
+  if (value instanceof Date) {
+    return value;
+  }
+
+  if (typeof value === "string" || typeof value === "number") {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  if (typeof value === "object" && value !== null) {
+    const maybeTimestamp = value as { toDate?: () => Date };
+    if (typeof maybeTimestamp.toDate === "function") {
+      const date = maybeTimestamp.toDate();
+      return Number.isNaN(date.getTime()) ? null : date;
+    }
+  }
+
+  return null;
 }
 
 /** Returns today's date string in IST (UTC+5:30) as YYYY-MM-DD */

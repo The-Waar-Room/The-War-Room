@@ -58,24 +58,37 @@ chatRouter.post(
         history,
       });
 
+      let usage: {
+        messagesUsedToday: number;
+        dailyLimit: number;
+        remaining: number;
+        plan: typeof planType;
+      } | null = null;
+
       // ── Track usage (Redis + Firestore) ──
-      const messagesUsedToday = await trackUsage({
-        userId,
-        appId,
-        tokenInput: result.tokenInput,
-        tokenOutput: result.tokenOutput,
-      });
+      try {
+        const messagesUsedToday = await trackUsage({
+          userId,
+          appId,
+          tokenInput: result.tokenInput,
+          tokenOutput: result.tokenOutput,
+        });
+
+        usage = {
+          messagesUsedToday,
+          dailyLimit: planLimits.daily_messages,
+          remaining: Math.max(0, planLimits.daily_messages - messagesUsedToday),
+          plan: planType,
+        };
+      } catch (trackErr) {
+        console.error("[chat] trackUsage failed:", trackErr);
+      }
 
       // ── Return response ──
       res.json({
         success: true,
         response: result.response,
-        usage: {
-          messagesUsedToday,
-          dailyLimit: planLimits.daily_messages,
-          remaining: Math.max(0, planLimits.daily_messages - messagesUsedToday),
-          plan: planType,
-        },
+        usage,
       });
     } catch (err) {
       console.error("[chat] Error:", err);
