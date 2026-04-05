@@ -8,7 +8,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
 import {
   ArrowLeft,
   Send,
@@ -162,18 +161,52 @@ export default function TicketDetailPage({
         </Button>
       </div>
 
-      {/* Status + actions */}
+      {/* Ticket Info Card */}
+      <Card>
+        <CardContent className="grid gap-4 p-4 sm:grid-cols-2 md:grid-cols-4">
+          <div>
+            <p className="text-xs font-medium text-muted-foreground">Status</p>
+            <Badge
+              variant={statusVariant[ticket.status]}
+              className="mt-1 text-xs"
+            >
+              {ticket.status.replace(/_/g, " ")}
+            </Badge>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-muted-foreground">
+              Priority
+            </p>
+            <Badge
+              variant={
+                ticket.priority === "high"
+                  ? "destructive"
+                  : ticket.priority === "low"
+                    ? "secondary"
+                    : "outline"
+              }
+              className="mt-1 text-xs font-bold"
+            >
+              {ticket.priority.charAt(0).toUpperCase() +
+                ticket.priority.slice(1)}
+            </Badge>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-muted-foreground">Created</p>
+            <p className="mt-1 text-sm">{formatTime(ticket.created_at)}</p>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-muted-foreground">Updated</p>
+            <p className="mt-1 text-sm">{formatTime(ticket.updated_at)}</p>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Status change */}
       <Card>
         <CardContent className="flex flex-wrap items-center gap-3 p-4">
           <span className="text-sm font-medium text-muted-foreground">
-            Status:
-          </span>
-          <Badge variant={statusVariant[ticket.status]} className="text-xs">
-            {ticket.status.replace(/_/g, " ")}
-          </Badge>
-          <Separator orientation="vertical" className="h-5" />
-          <span className="text-sm font-medium text-muted-foreground">
-            Change to:
+            Change status:
           </span>
           {statusOptions
             .filter((s) => s.value !== ticket.status)
@@ -213,10 +246,10 @@ export default function TicketDetailPage({
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-sm">
-            Messages ({messages.length})
+            Conversation ({messages.length})
           </CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-4">
           {messages.length === 0 && (
             <p className="py-4 text-center text-sm text-muted-foreground">
               No messages yet.
@@ -227,35 +260,47 @@ export default function TicketDetailPage({
             return (
               <div
                 key={msg.id}
-                className={`flex gap-3 ${isSupport ? "flex-row-reverse" : ""}`}
+                className={`flex gap-3 ${isSupport ? "justify-end" : "justify-start"}`}
               >
+                {!isSupport && (
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                    <User className="h-4 w-4" />
+                  </div>
+                )}
                 <div
-                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${
+                  className={`max-w-[75%] rounded-2xl px-4 py-2.5 ${
                     isSupport
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted text-muted-foreground"
+                      ? "rounded-tr-sm bg-primary text-primary-foreground"
+                      : "rounded-tl-sm bg-muted text-foreground"
                   }`}
                 >
-                  {isSupport ? (
-                    <Headphones className="h-3.5 w-3.5" />
-                  ) : (
-                    <User className="h-3.5 w-3.5" />
+                  {isSupport && (
+                    <p className="mb-0.5 text-[10px] font-semibold opacity-70">
+                      Admin
+                    </p>
                   )}
-                </div>
-                <div
-                  className={`max-w-[75%] rounded-lg px-3 py-2 ${
-                    isSupport
-                      ? "bg-primary/10 text-foreground"
-                      : "bg-muted text-foreground"
-                  }`}
-                >
-                  <p className="whitespace-pre-wrap text-sm">{msg.message}</p>
-                  <div className="mt-1 flex items-center gap-1 text-[10px] text-muted-foreground">
+                  {!isSupport && (
+                    <p className="mb-0.5 text-[10px] font-semibold text-muted-foreground">
+                      {msg.sender_id || "Customer"}
+                    </p>
+                  )}
+                  <p className="whitespace-pre-wrap text-sm leading-relaxed">
+                    {msg.message}
+                  </p>
+                  <div
+                    className={`mt-1.5 flex items-center gap-1 text-[10px] ${
+                      isSupport ? "opacity-60" : "text-muted-foreground"
+                    }`}
+                  >
                     <Clock className="h-2.5 w-2.5" />
                     {formatTime(msg.created_at)}
-                    <span className="ml-1">{msg.sender_id}</span>
                   </div>
                 </div>
+                {isSupport && (
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                    <Headphones className="h-4 w-4" />
+                  </div>
+                )}
               </div>
             );
           })}
@@ -267,7 +312,7 @@ export default function TicketDetailPage({
         <Card>
           <CardContent className="flex gap-2 p-4">
             <Input
-              placeholder="Type your reply…"
+              placeholder="Type your reply to the customer…"
               value={reply}
               onChange={(e) => setReply(e.target.value)}
               onKeyDown={(e) =>
@@ -283,7 +328,7 @@ export default function TicketDetailPage({
               className="gap-1.5"
             >
               <Send className="h-3.5 w-3.5" />
-              Send
+              Reply
             </Button>
           </CardContent>
         </Card>

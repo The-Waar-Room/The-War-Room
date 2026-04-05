@@ -149,20 +149,22 @@ export async function getTicket(
   const ticket = ticketSnap.data() as TicketDoc;
   if (ticket.uid !== uid) return { ticket: null, messages: [] };
 
-  const msgSnap = await db
-    .collection(MESSAGES_COL)
-    .where("ticket_id", "==", ticketId)
-    .orderBy("created_at", "asc")
-    .get();
+  const msgSnap = await db.collection(MESSAGES_COL).where("ticket_id", "==", ticketId).get();
 
-  const messages = msgSnap.docs.map((d) => {
-    const data = d.data();
-    return {
-      id: d.id,
-      ...data,
-      created_at: data.created_at?.toDate?.() ?? new Date(),
-    };
-  }) as unknown as TicketMessageDoc[];
+  const messages = msgSnap.docs
+    .map((d) => {
+      const data = d.data();
+      return {
+        id: d.id,
+        ...data,
+        created_at: data.created_at?.toDate?.() ?? new Date(),
+      };
+    })
+    .sort((a: any, b: any) => {
+      const aT = a.created_at?.getTime?.() ?? 0;
+      const bT = b.created_at?.getTime?.() ?? 0;
+      return aT - bT;
+    }) as unknown as TicketMessageDoc[];
 
   const serializedTicket = {
     ...ticket,
