@@ -115,15 +115,17 @@ export async function listTickets(
     query = query.where("status", "==", status);
   }
 
-  query = query
-    .orderBy("updated_at", "desc")
-    .offset(startIndex)
-    .limit(PAGE_SIZE + 1);
-
   const snap = await query.get();
-  const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() })) as (TicketDoc & { id: string })[];
-  const has_more = docs.length > PAGE_SIZE;
-  const tickets = docs.slice(0, PAGE_SIZE).map((d) => ({
+  const allDocs = snap.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .sort((a: any, b: any) => {
+      const aT = a.updated_at?.toDate?.()?.getTime() ?? 0;
+      const bT = b.updated_at?.toDate?.()?.getTime() ?? 0;
+      return bT - aT;
+    }) as (TicketDoc & { id: string })[];
+  const sliced = allDocs.slice(startIndex, startIndex + PAGE_SIZE + 1);
+  const has_more = sliced.length > PAGE_SIZE;
+  const tickets = sliced.slice(0, PAGE_SIZE).map((d) => ({
     ...d,
     created_at: d.created_at?.toDate?.() ?? new Date(),
     updated_at: d.updated_at?.toDate?.() ?? new Date(),
@@ -237,17 +239,21 @@ export async function adminListTickets(
   let query: FirebaseFirestore.Query = db.collection(TICKETS_COL);
   if (appId && appId !== "all") query = query.where("app_id", "==", appId);
   if (status) query = query.where("status", "==", status);
-  query = query.orderBy("updated_at", "desc").offset(offset).limit(limit);
 
   const snap = await query.get();
-  const tickets = snap.docs.map((d) => {
-    const data = d.data();
-    return {
-      ...data,
-      created_at: data.created_at?.toDate?.()?.toISOString() ?? null,
-      updated_at: data.updated_at?.toDate?.()?.toISOString() ?? null,
-    };
-  }) as unknown as TicketDoc[];
+  const tickets = snap.docs
+    .map((d) => {
+      const data = d.data();
+      return {
+        ...data,
+        created_at: data.created_at?.toDate?.()?.toISOString() ?? null,
+        updated_at: data.updated_at?.toDate?.()?.toISOString() ?? null,
+        _sort: data.updated_at?.toDate?.()?.getTime() ?? 0,
+      };
+    })
+    .sort((a, b) => (b._sort as number) - (a._sort as number))
+    .slice(offset, offset + limit)
+    .map(({ _sort, ...rest }) => rest) as unknown as TicketDoc[];
 
   return { tickets, total };
 }
@@ -260,20 +266,22 @@ export async function adminGetTicket(
   if (!ticketSnap.exists) return { ticket: null, messages: [] };
 
   const ticket = ticketSnap.data() as TicketDoc;
-  const msgSnap = await db
-    .collection(MESSAGES_COL)
-    .where("ticket_id", "==", ticketId)
-    .orderBy("created_at", "asc")
-    .get();
+  const msgSnap = await db.collection(MESSAGES_COL).where("ticket_id", "==", ticketId).get();
 
-  const messages = msgSnap.docs.map((d) => {
-    const data = d.data();
-    return {
-      id: d.id,
-      ...data,
-      created_at: data.created_at?.toDate?.()?.toISOString() ?? null,
-    };
-  }) as unknown as TicketMessageDoc[];
+  const messages = msgSnap.docs
+    .map((d) => {
+      const data = d.data();
+      return {
+        id: d.id,
+        ...data,
+        created_at: data.created_at?.toDate?.()?.toISOString() ?? null,
+      };
+    })
+    .sort((a: any, b: any) => {
+      const aT = a.created_at ?? "";
+      const bT = b.created_at ?? "";
+      return aT.localeCompare(bT);
+    }) as unknown as TicketMessageDoc[];
 
   const serializedTicket = {
     ...ticket,

@@ -270,16 +270,21 @@ export async function getUsers(
   const countSnap = await query.count().get();
   const total = countSnap.data().count;
 
-  const snap = await query
-    .orderBy("created_at", "desc")
-    .offset(offset)
-    .limit(limit)
-    .get();
+  const snap = await query.get();
 
-  const users = snap.docs.map((doc) => ({
-    id: doc.id,
-    ...(doc.data() as Omit<UserInfo, "id">),
-  }));
+  const users = snap.docs
+    .map((doc) => ({
+      id: doc.id,
+      ...(doc.data() as Omit<UserInfo, "id">),
+    }))
+    .sort((a, b) => {
+      const aTime =
+        (a.created_at as { _seconds: number } | undefined)?._seconds ?? 0;
+      const bTime =
+        (b.created_at as { _seconds: number } | undefined)?._seconds ?? 0;
+      return bTime - aTime;
+    })
+    .slice(offset, offset + limit);
 
   return { users, total };
 }
@@ -1194,17 +1199,21 @@ export async function getSupportTickets(
   let query: FirebaseFirestore.Query = adminDb.collection("support_tickets");
   if (appId && appId !== "all") query = query.where("app_id", "==", appId);
   if (status) query = query.where("status", "==", status);
-  query = query.orderBy("updated_at", "desc").offset(offset).limit(limit);
 
   const snap = await query.get();
-  const tickets = snap.docs.map((doc) => {
-    const data = doc.data();
-    return {
-      ...data,
-      created_at: data.created_at?.toDate?.()?.toISOString() ?? null,
-      updated_at: data.updated_at?.toDate?.()?.toISOString() ?? null,
-    };
-  }) as unknown as SupportTicket[];
+  const tickets = snap.docs
+    .map((doc) => {
+      const data = doc.data();
+      return {
+        ...data,
+        created_at: data.created_at?.toDate?.()?.toISOString() ?? null,
+        updated_at: data.updated_at?.toDate?.()?.toISOString() ?? null,
+        _sort: data.updated_at?.toDate?.()?.getTime() ?? 0,
+      };
+    })
+    .sort((a, b) => (b._sort as number) - (a._sort as number))
+    .slice(offset, offset + limit)
+    .map(({ _sort, ...rest }) => rest) as unknown as SupportTicket[];
 
   return { tickets, total };
 }
@@ -1228,17 +1237,20 @@ export async function getSupportTicketDetail(
   const msgSnap = await adminDb
     .collection("support_messages")
     .where("ticket_id", "==", ticketId)
-    .orderBy("created_at", "asc")
     .get();
 
-  const messages = msgSnap.docs.map((doc) => {
-    const d = doc.data();
-    return {
-      id: doc.id,
-      ...d,
-      created_at: d.created_at?.toDate?.()?.toISOString() ?? null,
-    };
-  }) as unknown as TicketMessage[];
+  const messages = msgSnap.docs
+    .map((doc) => {
+      const d = doc.data();
+      return {
+        id: doc.id,
+        ...d,
+        created_at: d.created_at?.toDate?.()?.toISOString() ?? null,
+        _sort: d.created_at?.toDate?.()?.getTime() ?? 0,
+      };
+    })
+    .sort((a, b) => (a._sort as number) - (b._sort as number))
+    .map(({ _sort, ...rest }) => rest) as unknown as TicketMessage[];
 
   return { ticket, messages };
 }
