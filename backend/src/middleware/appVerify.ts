@@ -20,6 +20,9 @@ export async function appVerify(
     const appSecret = req.headers["x-app-secret"] as string | undefined;
 
     if (!appId || !appSecret) {
+      console.warn(
+        `[appVerify] REJECT: Missing headers — x-app-id=${!!appId}, x-app-secret=${!!appSecret}`
+      );
       res.status(401).json({ success: false, error: "Missing app credentials" });
       return;
     }
@@ -28,6 +31,7 @@ export async function appVerify(
     const appSnap = await db.collection("apps").doc(appId).get();
 
     if (!appSnap.exists) {
+      console.warn(`[appVerify] REJECT: App doc not found for appId="${appId}"`);
       res.status(401).json({ success: false, error: "Invalid app credentials" });
       return;
     }
@@ -41,6 +45,9 @@ export async function appVerify(
 
     const secretHash = createHash("sha256").update(appSecret).digest("hex");
     if (secretHash !== appDoc.secret_hash) {
+      console.warn(
+        `[appVerify] REJECT: Secret mismatch for appId="${appId}" — computed=${secretHash.slice(0, 8)}… stored=${appDoc.secret_hash?.slice(0, 8)}…`
+      );
       res.status(401).json({ success: false, error: "Invalid app credentials" });
       return;
     }

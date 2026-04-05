@@ -45,8 +45,9 @@ export async function authMiddleware(
 
     req.user = user;
     next();
-  } catch (err) {
-    console.error("[authMiddleware] Error:", err);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[authMiddleware] REJECT: verifyIdToken failed — ${msg}`);
     res.status(401).json({ success: false, error: "Authentication failed" });
   }
 }
