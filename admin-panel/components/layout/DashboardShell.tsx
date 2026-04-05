@@ -30,7 +30,13 @@ export default function DashboardShell({
   children: React.ReactNode;
 }) {
   return (
-    <Suspense>
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-muted/40">
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        </div>
+      }
+    >
       <ShellInner>{children}</ShellInner>
     </Suspense>
   );

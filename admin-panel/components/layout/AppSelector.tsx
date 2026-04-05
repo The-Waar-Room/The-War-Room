@@ -1,5 +1,14 @@
 "use client";
 
+import { ChevronDown, Check } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+
 interface AppSelectorProps {
   value: string;
   onChange: (value: string) => void;
@@ -11,18 +20,35 @@ export default function AppSelector({
   onChange,
   apps,
 }: AppSelectorProps) {
+  const selected = apps.find((a) => a.id === value);
+  const label = selected?.label ?? "All Apps";
+
+  const options = [{ id: "all", label: "All Apps" }, ...apps];
+
   return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-    >
-      <option value="all">All Apps</option>
-      {apps.map((app) => (
-        <option key={app.id} value={app.id}>
-          {app.label}
-        </option>
-      ))}
-    </select>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full justify-between gap-2 text-sm font-normal"
+        >
+          <span className="truncate">{label}</span>
+          <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-50" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-[200px]">
+        {options.map((app) => (
+          <DropdownMenuItem
+            key={app.id}
+            onClick={() => onChange(app.id)}
+            className="justify-between"
+          >
+            {app.label}
+            {value === app.id && <Check className="h-3.5 w-3.5" />}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

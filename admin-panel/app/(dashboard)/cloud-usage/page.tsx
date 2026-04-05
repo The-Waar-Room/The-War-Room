@@ -47,7 +47,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/useToast";
 
-const INR_RATE = 84;
+import { INR_RATE } from "@/lib/firestore";
 
 interface CloudUsageData {
   vertexAi: {
@@ -163,11 +163,7 @@ function BudgetBar({
       <div className="h-2.5 w-full overflow-hidden rounded-full bg-muted">
         <div
           className={`h-full rounded-full transition-all ${
-            isOver
-              ? "bg-destructive"
-              : isWarning
-                ? "bg-amber-500"
-                : color
+            isOver ? "bg-destructive" : isWarning ? "bg-amber-500" : color
           }`}
           style={{ width: `${pct}%` }}
         />
@@ -471,7 +467,10 @@ function OverviewTab({ data }: { data: CloudUsageData }) {
                         fontSize: 12,
                         background: "hsl(var(--card))",
                       }}
-                      formatter={(v: unknown) => [`$${Number(v).toFixed(5)}`, "Total"]}
+                      formatter={(v: unknown) => [
+                        `$${Number(v).toFixed(5)}`,
+                        "Total",
+                      ]}
                     />
                     <Bar
                       dataKey="total"
@@ -600,26 +599,68 @@ function VertexAiTab({ data }: { data: CloudUsageData }) {
             </CardTitle>
           </CardHeader>
           <CardContent className="divide-y text-sm">
-            <MetricRow label="Input Token Cost" value={usd(v.inputCostUsd)} subtext="$0.15 / 1M tokens" />
-            <MetricRow label="Output Token Cost" value={usd(v.outputCostUsd)} subtext="$0.60 / 1M tokens" />
-            <MetricRow label="Total Token Cost" value={usd(v.inputCostUsd + v.outputCostUsd)} />
-            <MetricRow label="Avg Cost / Message" value={v.totalMessages > 0 ? usd(v.totalCostUsd / v.totalMessages) : "$0"} />
-            <MetricRow label="Avg Cost / Day" value={data.daysInPeriod > 0 ? usd(v.totalCostUsd / data.daysInPeriod) : "$0"} />
+            <MetricRow
+              label="Input Token Cost"
+              value={usd(v.inputCostUsd)}
+              subtext="$0.15 / 1M tokens"
+            />
+            <MetricRow
+              label="Output Token Cost"
+              value={usd(v.outputCostUsd)}
+              subtext="$0.60 / 1M tokens"
+            />
+            <MetricRow
+              label="Total Token Cost"
+              value={usd(v.inputCostUsd + v.outputCostUsd)}
+            />
+            <MetricRow
+              label="Avg Cost / Message"
+              value={
+                v.totalMessages > 0
+                  ? usd(v.totalCostUsd / v.totalMessages)
+                  : "$0"
+              }
+            />
+            <MetricRow
+              label="Avg Cost / Day"
+              value={
+                data.daysInPeriod > 0
+                  ? usd(v.totalCostUsd / data.daysInPeriod)
+                  : "$0"
+              }
+            />
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold">
-              Token Usage
-            </CardTitle>
+            <CardTitle className="text-sm font-semibold">Token Usage</CardTitle>
           </CardHeader>
           <CardContent className="divide-y text-sm">
-            <MetricRow label="Total Input Tokens" value={formatNum(v.totalTokenInput)} />
-            <MetricRow label="Total Output Tokens" value={formatNum(v.totalTokenOutput)} />
-            <MetricRow label="Total Tokens" value={formatNum(v.totalTokenInput + v.totalTokenOutput)} />
-            <MetricRow label="Avg Tokens / Message" value={formatNum(v.avgTokensPerMessage)} />
-            <MetricRow label="Input / Output Ratio" value={v.totalTokenOutput > 0 ? (v.totalTokenInput / v.totalTokenOutput).toFixed(2) + "x" : "N/A"} />
+            <MetricRow
+              label="Total Input Tokens"
+              value={formatNum(v.totalTokenInput)}
+            />
+            <MetricRow
+              label="Total Output Tokens"
+              value={formatNum(v.totalTokenOutput)}
+            />
+            <MetricRow
+              label="Total Tokens"
+              value={formatNum(v.totalTokenInput + v.totalTokenOutput)}
+            />
+            <MetricRow
+              label="Avg Tokens / Message"
+              value={formatNum(v.avgTokensPerMessage)}
+            />
+            <MetricRow
+              label="Input / Output Ratio"
+              value={
+                v.totalTokenOutput > 0
+                  ? (v.totalTokenInput / v.totalTokenOutput).toFixed(2) + "x"
+                  : "N/A"
+              }
+            />
           </CardContent>
         </Card>
       </div>
@@ -639,15 +680,60 @@ function VertexAiTab({ data }: { data: CloudUsageData }) {
                   <AreaChart data={v.dailyBreakdown}>
                     <defs>
                       <linearGradient id="vxGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#8b5cf6" stopOpacity={0.3} />
-                        <stop offset="100%" stopColor="#8b5cf6" stopOpacity={0} />
+                        <stop
+                          offset="0%"
+                          stopColor="#8b5cf6"
+                          stopOpacity={0.3}
+                        />
+                        <stop
+                          offset="100%"
+                          stopColor="#8b5cf6"
+                          stopOpacity={0}
+                        />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid stroke="hsl(var(--border))" vertical={false} />
-                    <XAxis dataKey="date" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} width={42} tickFormatter={(v: number) => `$${v.toFixed(3)}`} />
-                    <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid hsl(var(--border))", fontSize: 12, background: "hsl(var(--card))" }} formatter={(v: unknown) => [`$${Number(v).toFixed(5)}`, "Cost"]} />
-                    <Area type="monotone" dataKey="cost" stroke="#8b5cf6" strokeWidth={1.5} fill="url(#vxGrad)" />
+                    <CartesianGrid
+                      stroke="hsl(var(--border))"
+                      vertical={false}
+                    />
+                    <XAxis
+                      dataKey="date"
+                      tick={{
+                        fontSize: 10,
+                        fill: "hsl(var(--muted-foreground))",
+                      }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      tick={{
+                        fontSize: 10,
+                        fill: "hsl(var(--muted-foreground))",
+                      }}
+                      axisLine={false}
+                      tickLine={false}
+                      width={42}
+                      tickFormatter={(v: number) => `$${v.toFixed(3)}`}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        borderRadius: 8,
+                        border: "1px solid hsl(var(--border))",
+                        fontSize: 12,
+                        background: "hsl(var(--card))",
+                      }}
+                      formatter={(v: unknown) => [
+                        `$${Number(v).toFixed(5)}`,
+                        "Cost",
+                      ]}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="cost"
+                      stroke="#8b5cf6"
+                      strokeWidth={1.5}
+                      fill="url(#vxGrad)"
+                    />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
@@ -664,14 +750,72 @@ function VertexAiTab({ data }: { data: CloudUsageData }) {
               <div className="h-56 w-full">
                 <ResponsiveContainer>
                   <LineChart data={v.dailyBreakdown}>
-                    <CartesianGrid stroke="hsl(var(--border))" vertical={false} />
-                    <XAxis dataKey="date" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} width={42} tickFormatter={(v: number) => formatNum(v)} />
-                    <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid hsl(var(--border))", fontSize: 12, background: "hsl(var(--card))" }} formatter={(v: unknown, name: unknown) => [formatNum(Number(v)), String(name)]} />
-                    <Legend wrapperStyle={{ fontSize: 11 }} iconType="circle" iconSize={8} />
-                    <Line type="monotone" name="Messages" dataKey="messages" stroke="#8b5cf6" strokeWidth={2} dot={false} />
-                    <Line type="monotone" name="Input Tokens" dataKey="tokenInput" stroke="#a78bfa" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
-                    <Line type="monotone" name="Output Tokens" dataKey="tokenOutput" stroke="#c4b5fd" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
+                    <CartesianGrid
+                      stroke="hsl(var(--border))"
+                      vertical={false}
+                    />
+                    <XAxis
+                      dataKey="date"
+                      tick={{
+                        fontSize: 10,
+                        fill: "hsl(var(--muted-foreground))",
+                      }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      tick={{
+                        fontSize: 10,
+                        fill: "hsl(var(--muted-foreground))",
+                      }}
+                      axisLine={false}
+                      tickLine={false}
+                      width={42}
+                      tickFormatter={(v: number) => formatNum(v)}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        borderRadius: 8,
+                        border: "1px solid hsl(var(--border))",
+                        fontSize: 12,
+                        background: "hsl(var(--card))",
+                      }}
+                      formatter={(v: unknown, name: unknown) => [
+                        formatNum(Number(v)),
+                        String(name),
+                      ]}
+                    />
+                    <Legend
+                      wrapperStyle={{ fontSize: 11 }}
+                      iconType="circle"
+                      iconSize={8}
+                    />
+                    <Line
+                      type="monotone"
+                      name="Messages"
+                      dataKey="messages"
+                      stroke="#8b5cf6"
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                    <Line
+                      type="monotone"
+                      name="Input Tokens"
+                      dataKey="tokenInput"
+                      stroke="#a78bfa"
+                      strokeWidth={1.5}
+                      dot={false}
+                      strokeDasharray="4 2"
+                    />
+                    <Line
+                      type="monotone"
+                      name="Output Tokens"
+                      dataKey="tokenOutput"
+                      stroke="#c4b5fd"
+                      strokeWidth={1.5}
+                      dot={false}
+                      strokeDasharray="4 2"
+                    />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
@@ -698,11 +842,21 @@ function VertexAiTab({ data }: { data: CloudUsageData }) {
               {[...v.dailyBreakdown].reverse().map((d) => (
                 <TableRow key={d.date}>
                   <TableCell className="tabular-nums">{d.date}</TableCell>
-                  <TableCell className="tabular-nums">{d.messages.toLocaleString()}</TableCell>
-                  <TableCell className="tabular-nums">{formatNum(d.tokenInput)}</TableCell>
-                  <TableCell className="tabular-nums">{formatNum(d.tokenOutput)}</TableCell>
-                  <TableCell className="font-medium tabular-nums text-violet-600">{usd(d.cost)}</TableCell>
-                  <TableCell className="tabular-nums text-muted-foreground">{inr(d.cost * INR_RATE)}</TableCell>
+                  <TableCell className="tabular-nums">
+                    {d.messages.toLocaleString()}
+                  </TableCell>
+                  <TableCell className="tabular-nums">
+                    {formatNum(d.tokenInput)}
+                  </TableCell>
+                  <TableCell className="tabular-nums">
+                    {formatNum(d.tokenOutput)}
+                  </TableCell>
+                  <TableCell className="font-medium tabular-nums text-violet-600">
+                    {usd(d.cost)}
+                  </TableCell>
+                  <TableCell className="tabular-nums text-muted-foreground">
+                    {inr(d.cost * INR_RATE)}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -789,11 +943,30 @@ function CloudRunTab({ data }: { data: CloudUsageData }) {
             </CardTitle>
           </CardHeader>
           <CardContent className="divide-y text-sm">
-            <MetricRow label="Request Cost" value={usd(cr.requestCostUsd)} subtext="$0.40 / 1M requests" />
-            <MetricRow label="CPU Cost" value={usd(cr.estimatedCpuSeconds * 0.0000240)} subtext="$0.0240 / 1K vCPU-sec" />
-            <MetricRow label="Memory Cost" value={usd(cr.estimatedMemoryGbSeconds * 0.0000025)} subtext="$0.0025 / 1K GB-sec" />
+            <MetricRow
+              label="Request Cost"
+              value={usd(cr.requestCostUsd)}
+              subtext="$0.40 / 1M requests"
+            />
+            <MetricRow
+              label="CPU Cost"
+              value={usd(cr.estimatedCpuSeconds * 0.000024)}
+              subtext="$0.0240 / 1K vCPU-sec"
+            />
+            <MetricRow
+              label="Memory Cost"
+              value={usd(cr.estimatedMemoryGbSeconds * 0.0000025)}
+              subtext="$0.0025 / 1K GB-sec"
+            />
             <MetricRow label="Total Compute" value={usd(cr.computeCostUsd)} />
-            <MetricRow label="Avg Cost / Request" value={cr.estimatedRequestCount > 0 ? usd(cr.estimatedCostUsd / cr.estimatedRequestCount) : "$0"} />
+            <MetricRow
+              label="Avg Cost / Request"
+              value={
+                cr.estimatedRequestCount > 0
+                  ? usd(cr.estimatedCostUsd / cr.estimatedRequestCount)
+                  : "$0"
+              }
+            />
           </CardContent>
         </Card>
 
@@ -806,7 +979,11 @@ function CloudRunTab({ data }: { data: CloudUsageData }) {
           <CardContent className="divide-y text-sm">
             <MetricRow label="Service" value="the-war-room" />
             <MetricRow label="Region" value="us-central1" />
-            <MetricRow label="Min Instances" value="0" subtext="Scale to zero" />
+            <MetricRow
+              label="Min Instances"
+              value="0"
+              subtext="Scale to zero"
+            />
             <MetricRow label="Max Instances" value="10" />
             <MetricRow label="CPU" value="1 vCPU" />
             <MetricRow label="Memory" value="256 MB" />
@@ -874,15 +1051,60 @@ function CloudRunTab({ data }: { data: CloudUsageData }) {
                   <AreaChart data={cr.dailyBreakdown}>
                     <defs>
                       <linearGradient id="crGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#2563eb" stopOpacity={0.3} />
-                        <stop offset="100%" stopColor="#2563eb" stopOpacity={0} />
+                        <stop
+                          offset="0%"
+                          stopColor="#2563eb"
+                          stopOpacity={0.3}
+                        />
+                        <stop
+                          offset="100%"
+                          stopColor="#2563eb"
+                          stopOpacity={0}
+                        />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid stroke="hsl(var(--border))" vertical={false} />
-                    <XAxis dataKey="date" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} width={42} tickFormatter={(v: number) => `$${v.toFixed(4)}`} />
-                    <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid hsl(var(--border))", fontSize: 12, background: "hsl(var(--card))" }} formatter={(v: unknown) => [`$${Number(v).toFixed(6)}`, "Cost"]} />
-                    <Area type="monotone" dataKey="cost" stroke="#2563eb" strokeWidth={1.5} fill="url(#crGrad)" />
+                    <CartesianGrid
+                      stroke="hsl(var(--border))"
+                      vertical={false}
+                    />
+                    <XAxis
+                      dataKey="date"
+                      tick={{
+                        fontSize: 10,
+                        fill: "hsl(var(--muted-foreground))",
+                      }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      tick={{
+                        fontSize: 10,
+                        fill: "hsl(var(--muted-foreground))",
+                      }}
+                      axisLine={false}
+                      tickLine={false}
+                      width={42}
+                      tickFormatter={(v: number) => `$${v.toFixed(4)}`}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        borderRadius: 8,
+                        border: "1px solid hsl(var(--border))",
+                        fontSize: 12,
+                        background: "hsl(var(--card))",
+                      }}
+                      formatter={(v: unknown) => [
+                        `$${Number(v).toFixed(6)}`,
+                        "Cost",
+                      ]}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="cost"
+                      stroke="#2563eb"
+                      strokeWidth={1.5}
+                      fill="url(#crGrad)"
+                    />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
@@ -899,11 +1121,45 @@ function CloudRunTab({ data }: { data: CloudUsageData }) {
               <div className="h-56 w-full">
                 <ResponsiveContainer>
                   <BarChart data={cr.dailyBreakdown}>
-                    <CartesianGrid stroke="hsl(var(--border))" vertical={false} />
-                    <XAxis dataKey="date" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} width={42} />
-                    <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid hsl(var(--border))", fontSize: 12, background: "hsl(var(--card))" }} formatter={(v: unknown) => [Number(v).toLocaleString(), "Requests"]} />
-                    <Bar dataKey="requests" fill="#2563eb" radius={[4, 4, 0, 0]} />
+                    <CartesianGrid
+                      stroke="hsl(var(--border))"
+                      vertical={false}
+                    />
+                    <XAxis
+                      dataKey="date"
+                      tick={{
+                        fontSize: 10,
+                        fill: "hsl(var(--muted-foreground))",
+                      }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      tick={{
+                        fontSize: 10,
+                        fill: "hsl(var(--muted-foreground))",
+                      }}
+                      axisLine={false}
+                      tickLine={false}
+                      width={42}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        borderRadius: 8,
+                        border: "1px solid hsl(var(--border))",
+                        fontSize: 12,
+                        background: "hsl(var(--card))",
+                      }}
+                      formatter={(v: unknown) => [
+                        Number(v).toLocaleString(),
+                        "Requests",
+                      ]}
+                    />
+                    <Bar
+                      dataKey="requests"
+                      fill="#2563eb"
+                      radius={[4, 4, 0, 0]}
+                    />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -928,9 +1184,15 @@ function CloudRunTab({ data }: { data: CloudUsageData }) {
               {[...cr.dailyBreakdown].reverse().map((d) => (
                 <TableRow key={d.date}>
                   <TableCell className="tabular-nums">{d.date}</TableCell>
-                  <TableCell className="tabular-nums">{d.requests.toLocaleString()}</TableCell>
-                  <TableCell className="font-medium tabular-nums text-blue-600">{usd(d.cost)}</TableCell>
-                  <TableCell className="tabular-nums text-muted-foreground">{inr(d.cost * INR_RATE)}</TableCell>
+                  <TableCell className="tabular-nums">
+                    {d.requests.toLocaleString()}
+                  </TableCell>
+                  <TableCell className="font-medium tabular-nums text-blue-600">
+                    {usd(d.cost)}
+                  </TableCell>
+                  <TableCell className="tabular-nums text-muted-foreground">
+                    {inr(d.cost * INR_RATE)}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -1013,11 +1275,33 @@ function FirebaseTab({ data }: { data: CloudUsageData }) {
             </CardTitle>
           </CardHeader>
           <CardContent className="divide-y text-sm">
-            <MetricRow label="Firestore Read Cost" value={usd(fb.readCostUsd)} subtext="$0.06 / 100K reads" />
-            <MetricRow label="Firestore Write Cost" value={usd(fb.writeCostUsd)} subtext="$0.18 / 100K writes" />
-            <MetricRow label="Auth Cost" value="$0.00" subtext="Free up to 50K MAU" />
-            <MetricRow label="Total Estimated" value={usd(fb.estimatedCostUsd)} />
-            <MetricRow label="Avg Cost / Day" value={data.daysInPeriod > 0 ? usd(fb.estimatedCostUsd / data.daysInPeriod) : "$0"} />
+            <MetricRow
+              label="Firestore Read Cost"
+              value={usd(fb.readCostUsd)}
+              subtext="$0.06 / 100K reads"
+            />
+            <MetricRow
+              label="Firestore Write Cost"
+              value={usd(fb.writeCostUsd)}
+              subtext="$0.18 / 100K writes"
+            />
+            <MetricRow
+              label="Auth Cost"
+              value="$0.00"
+              subtext="Free up to 50K MAU"
+            />
+            <MetricRow
+              label="Total Estimated"
+              value={usd(fb.estimatedCostUsd)}
+            />
+            <MetricRow
+              label="Avg Cost / Day"
+              value={
+                data.daysInPeriod > 0
+                  ? usd(fb.estimatedCostUsd / data.daysInPeriod)
+                  : "$0"
+              }
+            />
           </CardContent>
         </Card>
 
@@ -1028,11 +1312,31 @@ function FirebaseTab({ data }: { data: CloudUsageData }) {
             </CardTitle>
           </CardHeader>
           <CardContent className="divide-y text-sm">
-            <MetricRow label="users" value="User profiles" subtext="Read per chat request" />
-            <MetricRow label="apps" value="App configs" subtext="Read per chat request" />
-            <MetricRow label="config" value="Global config" subtext="Cached, read on startup" />
-            <MetricRow label="subscriptions" value="Plan data" subtext="Read for rate limiting" />
-            <MetricRow label="ai_usage" value="Usage tracking" subtext="Write per chat message" />
+            <MetricRow
+              label="users"
+              value="User profiles"
+              subtext="Read per chat request"
+            />
+            <MetricRow
+              label="apps"
+              value="App configs"
+              subtext="Read per chat request"
+            />
+            <MetricRow
+              label="config"
+              value="Global config"
+              subtext="Cached, read on startup"
+            />
+            <MetricRow
+              label="subscriptions"
+              value="Plan data"
+              subtext="Read for rate limiting"
+            />
+            <MetricRow
+              label="ai_usage"
+              value="Usage tracking"
+              subtext="Write per chat message"
+            />
           </CardContent>
         </Card>
       </div>
@@ -1061,17 +1365,23 @@ function FirebaseTab({ data }: { data: CloudUsageData }) {
                   <TableCell>$0.06 / 100K reads</TableCell>
                 </TableRow>
                 <TableRow>
-                  <TableCell className="font-medium">Firestore Writes</TableCell>
+                  <TableCell className="font-medium">
+                    Firestore Writes
+                  </TableCell>
                   <TableCell>20,000 / day</TableCell>
                   <TableCell>$0.18 / 100K writes</TableCell>
                 </TableRow>
                 <TableRow>
-                  <TableCell className="font-medium">Firestore Deletes</TableCell>
+                  <TableCell className="font-medium">
+                    Firestore Deletes
+                  </TableCell>
                   <TableCell>20,000 / day</TableCell>
                   <TableCell>$0.02 / 100K deletes</TableCell>
                 </TableRow>
                 <TableRow>
-                  <TableCell className="font-medium">Firestore Storage</TableCell>
+                  <TableCell className="font-medium">
+                    Firestore Storage
+                  </TableCell>
                   <TableCell>1 GB total</TableCell>
                   <TableCell>$0.18 / GB / month</TableCell>
                 </TableRow>
@@ -1106,15 +1416,60 @@ function FirebaseTab({ data }: { data: CloudUsageData }) {
                   <AreaChart data={fb.dailyBreakdown}>
                     <defs>
                       <linearGradient id="fbGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#ea580c" stopOpacity={0.3} />
-                        <stop offset="100%" stopColor="#ea580c" stopOpacity={0} />
+                        <stop
+                          offset="0%"
+                          stopColor="#ea580c"
+                          stopOpacity={0.3}
+                        />
+                        <stop
+                          offset="100%"
+                          stopColor="#ea580c"
+                          stopOpacity={0}
+                        />
                       </linearGradient>
                     </defs>
-                    <CartesianGrid stroke="hsl(var(--border))" vertical={false} />
-                    <XAxis dataKey="date" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} width={42} tickFormatter={(v: number) => `$${v.toFixed(4)}`} />
-                    <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid hsl(var(--border))", fontSize: 12, background: "hsl(var(--card))" }} formatter={(v: unknown) => [`$${Number(v).toFixed(6)}`, "Cost"]} />
-                    <Area type="monotone" dataKey="cost" stroke="#ea580c" strokeWidth={1.5} fill="url(#fbGrad)" />
+                    <CartesianGrid
+                      stroke="hsl(var(--border))"
+                      vertical={false}
+                    />
+                    <XAxis
+                      dataKey="date"
+                      tick={{
+                        fontSize: 10,
+                        fill: "hsl(var(--muted-foreground))",
+                      }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      tick={{
+                        fontSize: 10,
+                        fill: "hsl(var(--muted-foreground))",
+                      }}
+                      axisLine={false}
+                      tickLine={false}
+                      width={42}
+                      tickFormatter={(v: number) => `$${v.toFixed(4)}`}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        borderRadius: 8,
+                        border: "1px solid hsl(var(--border))",
+                        fontSize: 12,
+                        background: "hsl(var(--card))",
+                      }}
+                      formatter={(v: unknown) => [
+                        `$${Number(v).toFixed(6)}`,
+                        "Cost",
+                      ]}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="cost"
+                      stroke="#ea580c"
+                      strokeWidth={1.5}
+                      fill="url(#fbGrad)"
+                    />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
@@ -1131,13 +1486,58 @@ function FirebaseTab({ data }: { data: CloudUsageData }) {
               <div className="h-56 w-full">
                 <ResponsiveContainer>
                   <BarChart data={fb.dailyBreakdown}>
-                    <CartesianGrid stroke="hsl(var(--border))" vertical={false} />
-                    <XAxis dataKey="date" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} width={42} tickFormatter={(v: number) => formatNum(v)} />
-                    <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid hsl(var(--border))", fontSize: 12, background: "hsl(var(--card))" }} formatter={(v: unknown, name: unknown) => [formatNum(Number(v)), String(name)]} />
-                    <Legend wrapperStyle={{ fontSize: 11 }} iconType="circle" iconSize={8} />
-                    <Bar name="Reads" dataKey="reads" fill="#ea580c" radius={[4, 4, 0, 0]} />
-                    <Bar name="Writes" dataKey="writes" fill="#fb923c" radius={[4, 4, 0, 0]} />
+                    <CartesianGrid
+                      stroke="hsl(var(--border))"
+                      vertical={false}
+                    />
+                    <XAxis
+                      dataKey="date"
+                      tick={{
+                        fontSize: 10,
+                        fill: "hsl(var(--muted-foreground))",
+                      }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      tick={{
+                        fontSize: 10,
+                        fill: "hsl(var(--muted-foreground))",
+                      }}
+                      axisLine={false}
+                      tickLine={false}
+                      width={42}
+                      tickFormatter={(v: number) => formatNum(v)}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        borderRadius: 8,
+                        border: "1px solid hsl(var(--border))",
+                        fontSize: 12,
+                        background: "hsl(var(--card))",
+                      }}
+                      formatter={(v: unknown, name: unknown) => [
+                        formatNum(Number(v)),
+                        String(name),
+                      ]}
+                    />
+                    <Legend
+                      wrapperStyle={{ fontSize: 11 }}
+                      iconType="circle"
+                      iconSize={8}
+                    />
+                    <Bar
+                      name="Reads"
+                      dataKey="reads"
+                      fill="#ea580c"
+                      radius={[4, 4, 0, 0]}
+                    />
+                    <Bar
+                      name="Writes"
+                      dataKey="writes"
+                      fill="#fb923c"
+                      radius={[4, 4, 0, 0]}
+                    />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -1163,10 +1563,18 @@ function FirebaseTab({ data }: { data: CloudUsageData }) {
               {[...fb.dailyBreakdown].reverse().map((d) => (
                 <TableRow key={d.date}>
                   <TableCell className="tabular-nums">{d.date}</TableCell>
-                  <TableCell className="tabular-nums">{formatNum(d.reads)}</TableCell>
-                  <TableCell className="tabular-nums">{formatNum(d.writes)}</TableCell>
-                  <TableCell className="font-medium tabular-nums text-orange-600">{usd(d.cost)}</TableCell>
-                  <TableCell className="tabular-nums text-muted-foreground">{inr(d.cost * INR_RATE)}</TableCell>
+                  <TableCell className="tabular-nums">
+                    {formatNum(d.reads)}
+                  </TableCell>
+                  <TableCell className="tabular-nums">
+                    {formatNum(d.writes)}
+                  </TableCell>
+                  <TableCell className="font-medium tabular-nums text-orange-600">
+                    {usd(d.cost)}
+                  </TableCell>
+                  <TableCell className="tabular-nums text-muted-foreground">
+                    {inr(d.cost * INR_RATE)}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -1285,7 +1693,13 @@ function BudgetSettings({
         </div>
         <div className="mt-4 flex items-center justify-between border-t pt-3">
           <p className="text-xs text-muted-foreground">
-            Total: ${((parseFloat(vertexAi) || 0) + (parseFloat(cloudRun) || 0) + (parseFloat(firebase) || 0)).toFixed(2)} / month
+            Total: $
+            {(
+              (parseFloat(vertexAi) || 0) +
+              (parseFloat(cloudRun) || 0) +
+              (parseFloat(firebase) || 0)
+            ).toFixed(2)}{" "}
+            / month
           </p>
           <Button size="sm" onClick={handleSave} disabled={saving}>
             <Save className="mr-1.5 h-3 w-3" />

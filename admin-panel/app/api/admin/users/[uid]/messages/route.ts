@@ -15,16 +15,24 @@ export async function GET(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const role = await getAdminRole(session.user.email);
+  try {
+    const role = await getAdminRole(session.user.email);
 
-  const { searchParams } = new URL(request.url);
-  const limit = Math.min(parseInt(searchParams.get("limit") || "50"), 200);
-  const offset = parseInt(searchParams.get("offset") || "0");
+    const { searchParams } = new URL(request.url);
+    const limit = Math.min(parseInt(searchParams.get("limit") || "50"), 200);
+    const offset = parseInt(searchParams.get("offset") || "0");
 
-  const [result, stats] = await Promise.all([
-    getUserMessages(params.uid, role, limit, offset),
-    getUserMessageStats(params.uid),
-  ]);
+    const [result, stats] = await Promise.all([
+      getUserMessages(params.uid, role, limit, offset),
+      getUserMessageStats(params.uid),
+    ]);
 
-  return NextResponse.json({ ...result, stats });
+    return NextResponse.json({ ...result, stats });
+  } catch (err) {
+    console.error("[api/users/uid/messages] GET failed:", err);
+    return NextResponse.json(
+      { error: "Failed to load messages" },
+      { status: 500 }
+    );
+  }
 }

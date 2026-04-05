@@ -29,7 +29,7 @@ import {
 } from "lucide-react";
 import { useSelectedApp } from "@/hooks/useSelectedApp";
 
-const INR_RATE = 84;
+import { INR_RATE } from "@/lib/firestore";
 
 interface UsageSummary {
   totalMessages: number;

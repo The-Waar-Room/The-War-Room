@@ -155,7 +155,7 @@ export default function SettingsPage() {
           <CardContent className="space-y-3">
             {Object.entries(config.plans).map(([plan, limits]) => (
               <PlanLimitRow
-                key={plan}
+                key={`${plan}-${limits.daily_messages}-${limits.max_input_tokens}-${limits.max_output_tokens}`}
                 plan={plan}
                 dailyMessages={limits.daily_messages}
                 maxInputTokens={limits.max_input_tokens}

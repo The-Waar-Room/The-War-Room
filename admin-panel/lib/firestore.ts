@@ -291,29 +291,33 @@ export async function getUserDetail(uid: string) {
   const userData = { id: userDoc.id, ...userDoc.data() } as UserInfo;
 
   const [subsSnap, usageSnap] = await Promise.all([
-    adminDb
-      .collection("subscriptions")
-      .where("user_id", "==", uid)
-      .orderBy("verified_at", "desc")
-      .limit(10)
-      .get(),
-    adminDb
-      .collection("ai_usage")
-      .where("user_id", "==", uid)
-      .orderBy("date", "desc")
-      .limit(30)
-      .get(),
+    adminDb.collection("subscriptions").where("user_id", "==", uid).get(),
+    adminDb.collection("ai_usage").where("user_id", "==", uid).get(),
   ]);
 
-  const subscriptions = subsSnap.docs.map((doc) => ({
-    id: doc.id,
-    ...(doc.data() as Omit<SubscriptionInfo, "id">),
-  }));
+  const subscriptions = subsSnap.docs
+    .map((doc) => ({
+      id: doc.id,
+      ...(doc.data() as Omit<SubscriptionInfo, "id">),
+    }))
+    .sort((a, b) => {
+      const aTime = (a as Record<string, unknown>).verified_at as
+        | { _seconds: number }
+        | undefined;
+      const bTime = (b as Record<string, unknown>).verified_at as
+        | { _seconds: number }
+        | undefined;
+      return (bTime?._seconds ?? 0) - (aTime?._seconds ?? 0);
+    })
+    .slice(0, 10);
 
-  const usage = usageSnap.docs.map((doc) => ({
-    id: doc.id,
-    ...(doc.data() as Omit<AiUsageRecord, "id">),
-  }));
+  const usage = usageSnap.docs
+    .map((doc) => ({
+      id: doc.id,
+      ...(doc.data() as Omit<AiUsageRecord, "id">),
+    }))
+    .sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""))
+    .slice(0, 30);
 
   return { user: userData, subscriptions, usage };
 }
@@ -776,42 +780,38 @@ export async function getUserMessages(
   limit = 50,
   offset = 0
 ): Promise<{ messages: ChatEventInfo[]; total: number }> {
-  const baseQuery = adminDb
+  const snap = await adminDb
     .collection("chat_events")
-    .where("user_id", "==", uid);
-
-  const countSnap = await baseQuery.count().get();
-  const total = countSnap.data().count;
-
-  const snap = await baseQuery
-    .orderBy("created_at", "desc")
-    .offset(offset)
-    .limit(limit)
+    .where("user_id", "==", uid)
     .get();
 
+  const total = snap.size;
   const maskContent = role === "viewer";
 
-  const messages: ChatEventInfo[] = snap.docs.map((doc) => {
-    const d = doc.data();
-    return {
-      id: doc.id,
-      user_id: d.user_id,
-      app_id: d.app_id,
-      session_id: d.session_id,
-      prompt: maskContent ? "[masked]" : d.prompt,
-      response: maskContent ? "[masked]" : d.response,
-      context_preview: maskContent ? "[masked]" : d.context_preview || "",
-      context_hash: d.context_hash || "",
-      token_input: d.token_input || 0,
-      token_output: d.token_output || 0,
-      cost_usd: d.cost_usd || 0,
-      plan_type: d.plan_type || "free",
-      status: d.status || "success",
-      latency_ms: d.latency_ms || 0,
-      created_at: d.created_at?.toDate?.()?.toISOString() ?? null,
-    };
-  });
+  const allMessages: ChatEventInfo[] = snap.docs
+    .map((doc) => {
+      const d = doc.data();
+      return {
+        id: doc.id,
+        user_id: d.user_id,
+        app_id: d.app_id,
+        session_id: d.session_id,
+        prompt: maskContent ? "[masked]" : d.prompt,
+        response: maskContent ? "[masked]" : d.response,
+        context_preview: maskContent ? "[masked]" : d.context_preview || "",
+        context_hash: d.context_hash || "",
+        token_input: d.token_input || 0,
+        token_output: d.token_output || 0,
+        cost_usd: d.cost_usd || 0,
+        plan_type: d.plan_type || "free",
+        status: d.status || "success",
+        latency_ms: d.latency_ms || 0,
+        created_at: d.created_at?.toDate?.()?.toISOString() ?? null,
+      };
+    })
+    .sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""));
 
+  const messages = allMessages.slice(offset, offset + limit);
   return { messages, total };
 }
 
@@ -823,11 +823,18 @@ export async function getUserMessageStats(
 ): Promise<UserMessageStats> {
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
-  const snap = await adminDb
+  const allSnap = await adminDb
     .collection("chat_events")
     .where("user_id", "==", uid)
-    .where("created_at", ">=", thirtyDaysAgo)
     .get();
+
+  // Filter to last 30 days in memory to avoid composite index requirement
+  const docs = allSnap.docs.filter((doc) => {
+    const createdAt = doc.data().created_at?.toDate?.();
+    return createdAt && createdAt >= thirtyDaysAgo;
+  });
+
+  const snap = { docs };
 
   let totalMessages = 0;
   let totalTokenInput = 0;
@@ -926,4 +933,200 @@ export async function getTopUsersByCost(
   }
 
   return results;
+}
+
+// ── Alerts (threshold-based, computed from existing data) ──
+
+export type AlertSeverity = "critical" | "warning" | "info";
+
+export interface AlertItem {
+  id: string;
+  severity: AlertSeverity;
+  title: string;
+  description: string;
+  timestamp: string;
+}
+
+export async function getAlerts(appId: string = "all"): Promise<AlertItem[]> {
+  const today = new Date();
+  const todayKey = toDateKey(today);
+  const alerts: AlertItem[] = [];
+  const now = today.toISOString();
+
+  // Parallel fetch: today's usage, config, active subscriptions, recent events
+  const [configDoc, todayUsageSnap, subsSnap, chatEventsSnap] =
+    await Promise.all([
+      adminDb.collection("config").doc("global").get(),
+      (() => {
+        let q: FirebaseFirestore.Query = adminDb.collection("ai_usage");
+        if (appId !== "all") q = q.where("app_id", "==", appId);
+        return q.where("date", "==", todayKey).get();
+      })(),
+      (() => {
+        let q: FirebaseFirestore.Query = adminDb.collection("subscriptions");
+        if (appId !== "all") q = q.where("app_id", "==", appId);
+        return q.get();
+      })(),
+      (() => {
+        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        return adminDb
+          .collection("chat_events")
+          .where("status", "==", "error")
+          .where("created_at", ">=", oneDayAgo)
+          .get();
+      })(),
+    ]);
+
+  const config = configDoc.data() as GlobalConfig | undefined;
+  const budgets = config?.budgets ?? {
+    vertex_ai: 40,
+    cloud_run: 10,
+    firebase: 10,
+  };
+  const killSwitch = config?.kill_switch ?? false;
+
+  // 1. Kill switch alert
+  if (killSwitch) {
+    alerts.push({
+      id: "kill-switch-on",
+      severity: "critical",
+      title: "Kill Switch Active",
+      description:
+        "AI features are disabled for all users. Go to Settings to re-enable.",
+      timestamp: now,
+    });
+  }
+
+  // 2. Daily AI cost check
+  let todayCostUsd = 0;
+  let todayMessages = 0;
+  const userMessageCounts: Record<string, number> = {};
+
+  for (const doc of todayUsageSnap.docs) {
+    const d = doc.data();
+    todayCostUsd += Number(d.cost_usd || 0);
+    todayMessages += Number(d.message_count || 0);
+    const uid = d.user_id;
+    userMessageCounts[uid] =
+      (userMessageCounts[uid] || 0) + Number(d.message_count || 0);
+  }
+
+  const todayCostInr = todayCostUsd * INR_RATE;
+  if (todayCostInr > 500) {
+    alerts.push({
+      id: "daily-cost-high",
+      severity: todayCostInr > 1000 ? "critical" : "warning",
+      title: "Daily AI Cost High",
+      description: `Today's AI cost is ₹${todayCostInr.toFixed(0)} ($${todayCostUsd.toFixed(2)}). ${todayCostInr > 1000 ? "Exceeds ₹1000 threshold." : "Exceeds ₹500 threshold."}`,
+      timestamp: now,
+    });
+  }
+
+  // 3. Budget utilization (monthly, rough estimate from daily * 30)
+  const projectedMonthlyUsd = todayCostUsd * 30;
+  if (projectedMonthlyUsd > budgets.vertex_ai * 0.8) {
+    const pct = Math.round((projectedMonthlyUsd / budgets.vertex_ai) * 100);
+    alerts.push({
+      id: "budget-vertex-ai",
+      severity: pct >= 100 ? "critical" : "warning",
+      title: "Vertex AI Budget Alert",
+      description: `Projected monthly spend: $${projectedMonthlyUsd.toFixed(2)} (${pct}% of $${budgets.vertex_ai} budget).`,
+      timestamp: now,
+    });
+  }
+
+  // 4. Heavy users (anyone exceeding daily plan limits)
+  const plans = config?.plans ?? {};
+  for (const [uid, count] of Object.entries(userMessageCounts)) {
+    // Check against highest plan limit as a baseline alert
+    const maxLimit = Math.max(
+      ...Object.values(plans).map((p) => p.daily_messages),
+      50
+    );
+    if (count > maxLimit * 0.9) {
+      alerts.push({
+        id: `heavy-user-${uid.slice(0, 8)}`,
+        severity: count > maxLimit ? "warning" : "info",
+        title: "Heavy Usage Detected",
+        description: `User ${uid.slice(0, 12)}… sent ${count} messages today (limit: ${maxLimit}).`,
+        timestamp: now,
+      });
+    }
+  }
+
+  // 5. Recent errors (last 24h)
+  const errorCount = chatEventsSnap.size;
+  if (errorCount > 0) {
+    alerts.push({
+      id: "recent-errors",
+      severity: errorCount > 10 ? "critical" : "warning",
+      title: `${errorCount} Chat Error${errorCount > 1 ? "s" : ""} (24h)`,
+      description: `${errorCount} chat request${errorCount > 1 ? "s" : ""} failed in the last 24 hours. Check user messages for details.`,
+      timestamp: now,
+    });
+  }
+
+  // 6. Expiring subscriptions (in next 3 days)
+  const threeDaysLater = new Date(today.getTime() + 3 * 24 * 60 * 60 * 1000);
+  let expiringCount = 0;
+  let expiredCount = 0;
+
+  for (const doc of subsSnap.docs) {
+    const d = doc.data();
+    const expiresAt =
+      d.expires_at?.toDate?.() ??
+      (d.expires_at ? new Date(d.expires_at) : null);
+    if (!expiresAt) continue;
+    if (
+      d.status === "active" &&
+      expiresAt <= threeDaysLater &&
+      expiresAt > today
+    ) {
+      expiringCount++;
+    }
+    if (d.status === "active" && expiresAt <= today) {
+      expiredCount++;
+    }
+  }
+
+  if (expiredCount > 0) {
+    alerts.push({
+      id: "expired-subs",
+      severity: "warning",
+      title: `${expiredCount} Expired Subscription${expiredCount > 1 ? "s" : ""}`,
+      description: `${expiredCount} subscription${expiredCount > 1 ? "s are" : " is"} past expiry but still marked active.`,
+      timestamp: now,
+    });
+  }
+
+  if (expiringCount > 0) {
+    alerts.push({
+      id: "expiring-subs",
+      severity: "info",
+      title: `${expiringCount} Subscription${expiringCount > 1 ? "s" : ""} Expiring Soon`,
+      description: `${expiringCount} active subscription${expiringCount > 1 ? "s" : ""} will expire in the next 3 days.`,
+      timestamp: now,
+    });
+  }
+
+  // 7. Zero activity alert
+  if (todayMessages === 0) {
+    alerts.push({
+      id: "zero-activity",
+      severity: "info",
+      title: "No Activity Today",
+      description: "No AI messages recorded today yet.",
+      timestamp: now,
+    });
+  }
+
+  // Sort: critical first, then warning, then info
+  const order: Record<AlertSeverity, number> = {
+    critical: 0,
+    warning: 1,
+    info: 2,
+  };
+  alerts.sort((a, b) => order[a.severity] - order[b.severity]);
+
+  return alerts;
 }

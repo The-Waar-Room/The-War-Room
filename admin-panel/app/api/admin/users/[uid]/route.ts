@@ -11,12 +11,19 @@ export async function GET(
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const data = await getUserDetail(params.uid);
-  if (!data) {
-    return NextResponse.json({ error: "User not found" }, { status: 404 });
+  try {
+    const data = await getUserDetail(params.uid);
+    if (!data) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+    return NextResponse.json(data);
+  } catch (err) {
+    console.error("[api/users/uid] GET failed:", err);
+    return NextResponse.json(
+      { error: "Failed to load user details" },
+      { status: 500 }
+    );
   }
-
-  return NextResponse.json(data);
 }
 
 export async function POST(
