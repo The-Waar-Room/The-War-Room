@@ -30,11 +30,23 @@ const PAGE_SIZE = 25;
 
 const statusConfig: Record<
   TicketStatus,
-  { label: string; variant: "default" | "secondary" | "destructive" | "outline"; icon: typeof Clock }
+  {
+    label: string;
+    variant: "default" | "secondary" | "destructive" | "outline";
+    icon: typeof Clock;
+  }
 > = {
   open: { label: "Open", variant: "destructive", icon: AlertCircle },
-  waiting_for_customer: { label: "Waiting Customer", variant: "outline", icon: Clock },
-  waiting_for_support: { label: "Waiting Support", variant: "default", icon: MessageSquare },
+  waiting_for_customer: {
+    label: "Waiting Customer",
+    variant: "outline",
+    icon: Clock,
+  },
+  waiting_for_support: {
+    label: "Waiting Support",
+    variant: "default",
+    icon: MessageSquare,
+  },
   resolved: { label: "Resolved", variant: "secondary", icon: CheckCircle2 },
   closed: { label: "Closed", variant: "secondary", icon: XCircle },
 };
@@ -65,9 +77,17 @@ function relativeTime(iso?: string | null) {
 
 function priorityBadge(p: string) {
   if (p === "high")
-    return <Badge variant="destructive" className="text-[10px]">High</Badge>;
+    return (
+      <Badge variant="destructive" className="text-[10px]">
+        High
+      </Badge>
+    );
   if (p === "low")
-    return <Badge variant="secondary" className="text-[10px]">Low</Badge>;
+    return (
+      <Badge variant="secondary" className="text-[10px]">
+        Low
+      </Badge>
+    );
   return null;
 }
 
@@ -209,7 +229,10 @@ export default function SupportTicketsPage() {
             <TableBody>
               {data.tickets.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-8 text-center text-muted-foreground">
+                  <TableCell
+                    colSpan={7}
+                    className="py-8 text-center text-muted-foreground"
+                  >
                     No tickets found.
                   </TableCell>
                 </TableRow>

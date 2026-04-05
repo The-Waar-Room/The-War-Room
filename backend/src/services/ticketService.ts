@@ -109,9 +109,7 @@ export async function listTickets(
     .get();
   const openTickets = openSnap.data().count;
 
-  let query: FirebaseFirestore.Query = db
-    .collection(TICKETS_COL)
-    .where("uid", "==", uid);
+  let query: FirebaseFirestore.Query = db.collection(TICKETS_COL).where("uid", "==", uid);
 
   if (status) {
     query = query.where("status", "==", status);
@@ -204,10 +202,7 @@ export async function replyToTicket(
   return true;
 }
 
-export async function closeTicket(
-  ticketId: string,
-  uid: string
-): Promise<boolean> {
+export async function closeTicket(ticketId: string, uid: string): Promise<boolean> {
   const db = getFirestore();
   const ticketSnap = await db.collection(TICKETS_COL).doc(ticketId).get();
 
@@ -282,8 +277,10 @@ export async function adminGetTicket(
 
   const serializedTicket = {
     ...ticket,
-    created_at: (ticket.created_at as unknown as { toDate: () => Date })?.toDate?.()?.toISOString() ?? null,
-    updated_at: (ticket.updated_at as unknown as { toDate: () => Date })?.toDate?.()?.toISOString() ?? null,
+    created_at:
+      (ticket.created_at as unknown as { toDate: () => Date })?.toDate?.()?.toISOString() ?? null,
+    updated_at:
+      (ticket.updated_at as unknown as { toDate: () => Date })?.toDate?.()?.toISOString() ?? null,
   };
 
   return { ticket: serializedTicket as unknown as TicketDoc, messages };
@@ -342,19 +339,19 @@ export async function adminGetTicketStats(appId?: string): Promise<{
 }> {
   const db = getFirestore();
 
-  const base = appId && appId !== "all"
-    ? db.collection(TICKETS_COL).where("app_id", "==", appId)
-    : db.collection(TICKETS_COL);
+  const base =
+    appId && appId !== "all"
+      ? db.collection(TICKETS_COL).where("app_id", "==", appId)
+      : db.collection(TICKETS_COL);
 
-  const [totalSnap, openSnap, wcSnap, wsSnap, resolvedSnap, closedSnap] =
-    await Promise.all([
-      base.count().get(),
-      base.where("status", "==", "open").count().get(),
-      base.where("status", "==", "waiting_for_customer").count().get(),
-      base.where("status", "==", "waiting_for_support").count().get(),
-      base.where("status", "==", "resolved").count().get(),
-      base.where("status", "==", "closed").count().get(),
-    ]);
+  const [totalSnap, openSnap, wcSnap, wsSnap, resolvedSnap, closedSnap] = await Promise.all([
+    base.count().get(),
+    base.where("status", "==", "open").count().get(),
+    base.where("status", "==", "waiting_for_customer").count().get(),
+    base.where("status", "==", "waiting_for_support").count().get(),
+    base.where("status", "==", "resolved").count().get(),
+    base.where("status", "==", "closed").count().get(),
+  ]);
 
   return {
     total: totalSnap.data().count,

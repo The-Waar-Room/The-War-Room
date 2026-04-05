@@ -17,7 +17,11 @@ import {
   Headphones,
   RefreshCw,
 } from "lucide-react";
-import type { SupportTicket, TicketMessage, TicketStatus } from "@/lib/firestore";
+import type {
+  SupportTicket,
+  TicketMessage,
+  TicketStatus,
+} from "@/lib/firestore";
 import Link from "next/link";
 
 const statusOptions: { value: TicketStatus; label: string }[] = [
@@ -28,7 +32,10 @@ const statusOptions: { value: TicketStatus; label: string }[] = [
   { value: "closed", label: "Closed" },
 ];
 
-const statusVariant: Record<TicketStatus, "default" | "secondary" | "destructive" | "outline"> = {
+const statusVariant: Record<
+  TicketStatus,
+  "default" | "secondary" | "destructive" | "outline"
+> = {
   open: "destructive",
   waiting_for_customer: "outline",
   waiting_for_support: "default",
@@ -145,7 +152,12 @@ export default function TicketDetailPage({
             {ticket.version ? ` v${ticket.version}` : ""}
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => mutate()} className="gap-1.5">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => mutate()}
+          className="gap-1.5"
+        >
           <RefreshCw className="h-3.5 w-3.5" />
         </Button>
       </div>
@@ -153,12 +165,16 @@ export default function TicketDetailPage({
       {/* Status + actions */}
       <Card>
         <CardContent className="flex flex-wrap items-center gap-3 p-4">
-          <span className="text-sm font-medium text-muted-foreground">Status:</span>
+          <span className="text-sm font-medium text-muted-foreground">
+            Status:
+          </span>
           <Badge variant={statusVariant[ticket.status]} className="text-xs">
             {ticket.status.replace(/_/g, " ")}
           </Badge>
           <Separator orientation="vertical" className="h-5" />
-          <span className="text-sm font-medium text-muted-foreground">Change to:</span>
+          <span className="text-sm font-medium text-muted-foreground">
+            Change to:
+          </span>
           {statusOptions
             .filter((s) => s.value !== ticket.status)
             .map((s) => (
@@ -254,7 +270,9 @@ export default function TicketDetailPage({
               placeholder="Type your reply…"
               value={reply}
               onChange={(e) => setReply(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleReply()}
+              onKeyDown={(e) =>
+                e.key === "Enter" && !e.shiftKey && handleReply()
+              }
               disabled={sending}
               className="flex-1"
             />

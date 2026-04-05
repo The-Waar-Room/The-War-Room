@@ -41,8 +41,7 @@ ticketRouter.post(
 
       switch (action) {
         case "create": {
-          const { subject, message, priority, app_type, version, metadata } =
-            req.body;
+          const { subject, message, priority, app_type, version, metadata } = req.body;
 
           if (!message || typeof message !== "string" || message.trim().length < 10) {
             res.status(400).json({
@@ -59,10 +58,8 @@ ticketRouter.post(
           const safeSubject =
             typeof subject === "string" ? subject.slice(0, 100) : "Support Request";
           const safeMessage = message.slice(0, 2000);
-          const safeVersion =
-            typeof version === "string" ? version.slice(0, 20) : "unknown";
-          const safeAppType =
-            typeof app_type === "string" ? app_type.slice(0, 20) : "android";
+          const safeVersion = typeof version === "string" ? version.slice(0, 20) : "unknown";
+          const safeAppType = typeof app_type === "string" ? app_type.slice(0, 20) : "android";
 
           // Sanitize metadata: only string key-value pairs, max 10 entries
           let safeMetadata: Record<string, string> = {};
@@ -97,9 +94,7 @@ ticketRouter.post(
 
         case "list": {
           const startIndex = Math.max(0, parseInt(req.body.startIndex) || 0);
-          const status: TicketStatus | undefined = VALID_STATUSES.includes(
-            req.body.status
-          )
+          const status: TicketStatus | undefined = VALID_STATUSES.includes(req.body.status)
             ? req.body.status
             : undefined;
 
@@ -137,18 +132,14 @@ ticketRouter.post(
         case "reply": {
           const { ticket_id, message } = req.body;
           if (!ticket_id || !message || typeof message !== "string") {
-            res
-              .status(400)
-              .json({ status: "error", message: "ticket_id and message required" });
+            res.status(400).json({ status: "error", message: "ticket_id and message required" });
             return;
           }
 
           const safeMsg = message.slice(0, 2000);
           const ok = await replyToTicket(ticket_id, uid, safeMsg);
           if (!ok) {
-            res
-              .status(400)
-              .json({ status: "error", message: "Cannot reply to this ticket" });
+            res.status(400).json({ status: "error", message: "Cannot reply to this ticket" });
             return;
           }
 
@@ -165,9 +156,7 @@ ticketRouter.post(
 
           const ok = await closeTicket(ticket_id, uid);
           if (!ok) {
-            res
-              .status(400)
-              .json({ status: "error", message: "Cannot close this ticket" });
+            res.status(400).json({ status: "error", message: "Cannot close this ticket" });
             return;
           }
 
