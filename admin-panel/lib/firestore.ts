@@ -345,12 +345,23 @@ export async function getSubscriptions(
     query = query.where("status", "==", status);
   }
 
-  const snap = await query.orderBy("verified_at", "desc").limit(limit).get();
+  const snap = await query.get();
 
-  return snap.docs.map((doc) => ({
-    id: doc.id,
-    ...(doc.data() as Omit<SubscriptionInfo, "id">),
-  }));
+  return snap.docs
+    .map((doc) => ({
+      id: doc.id,
+      ...(doc.data() as Omit<SubscriptionInfo, "id">),
+    }))
+    .sort((a, b) => {
+      const aTime =
+        (a as unknown as Record<string, { _seconds?: number }>).verified_at
+          ?._seconds ?? 0;
+      const bTime =
+        (b as unknown as Record<string, { _seconds?: number }>).verified_at
+          ?._seconds ?? 0;
+      return bTime - aTime;
+    })
+    .slice(0, limit);
 }
 
 export async function getSubscriptionStats(appId?: string) {
@@ -1129,4 +1140,187 @@ export async function getAlerts(appId: string = "all"): Promise<AlertItem[]> {
   alerts.sort((a, b) => order[a.severity] - order[b.severity]);
 
   return alerts;
+}
+
+// ── Support Tickets ──
+
+export type TicketStatus =
+  | "open"
+  | "waiting_for_customer"
+  | "waiting_for_support"
+  | "resolved"
+  | "closed";
+
+export type TicketPriority = "low" | "normal" | "high";
+
+export interface SupportTicket {
+  ticket_id: string;
+  uid: string;
+  email: string;
+  app_id: string;
+  subject: string;
+  status: TicketStatus;
+  priority: TicketPriority;
+  app_type: string;
+  version: string;
+  metadata?: Record<string, string>;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface TicketMessage {
+  id: string;
+  ticket_id: string;
+  message: string;
+  sender_type: "customer" | "support";
+  sender_id: string;
+  created_at?: string;
+}
+
+export async function getSupportTickets(
+  appId?: string,
+  status?: TicketStatus,
+  limit = 50,
+  offset = 0
+): Promise<{ tickets: SupportTicket[]; total: number }> {
+  let countQuery: FirebaseFirestore.Query =
+    adminDb.collection("support_tickets");
+  if (appId && appId !== "all")
+    countQuery = countQuery.where("app_id", "==", appId);
+  if (status) countQuery = countQuery.where("status", "==", status);
+  const countSnap = await countQuery.count().get();
+  const total = countSnap.data().count;
+
+  let query: FirebaseFirestore.Query = adminDb.collection("support_tickets");
+  if (appId && appId !== "all") query = query.where("app_id", "==", appId);
+  if (status) query = query.where("status", "==", status);
+  query = query.orderBy("updated_at", "desc").offset(offset).limit(limit);
+
+  const snap = await query.get();
+  const tickets = snap.docs.map((doc) => {
+    const data = doc.data();
+    return {
+      ...data,
+      created_at: data.created_at?.toDate?.()?.toISOString() ?? null,
+      updated_at: data.updated_at?.toDate?.()?.toISOString() ?? null,
+    };
+  }) as unknown as SupportTicket[];
+
+  return { tickets, total };
+}
+
+export async function getSupportTicketDetail(
+  ticketId: string
+): Promise<{ ticket: SupportTicket | null; messages: TicketMessage[] }> {
+  const ticketSnap = await adminDb
+    .collection("support_tickets")
+    .doc(ticketId)
+    .get();
+  if (!ticketSnap.exists) return { ticket: null, messages: [] };
+
+  const data = ticketSnap.data()!;
+  const ticket = {
+    ...data,
+    created_at: data.created_at?.toDate?.()?.toISOString() ?? null,
+    updated_at: data.updated_at?.toDate?.()?.toISOString() ?? null,
+  } as unknown as SupportTicket;
+
+  const msgSnap = await adminDb
+    .collection("support_messages")
+    .where("ticket_id", "==", ticketId)
+    .orderBy("created_at", "asc")
+    .get();
+
+  const messages = msgSnap.docs.map((doc) => {
+    const d = doc.data();
+    return {
+      id: doc.id,
+      ...d,
+      created_at: d.created_at?.toDate?.()?.toISOString() ?? null,
+    };
+  }) as unknown as TicketMessage[];
+
+  return { ticket, messages };
+}
+
+export async function adminReplyToTicket(
+  ticketId: string,
+  adminEmail: string,
+  message: string
+): Promise<boolean> {
+  const { FieldValue } = await import("firebase-admin/firestore");
+  const ticketSnap = await adminDb
+    .collection("support_tickets")
+    .doc(ticketId)
+    .get();
+  if (!ticketSnap.exists) return false;
+
+  const now = FieldValue.serverTimestamp();
+
+  await adminDb.collection("support_messages").add({
+    ticket_id: ticketId,
+    message,
+    sender_type: "support",
+    sender_id: adminEmail,
+    created_at: now,
+  });
+
+  await adminDb.collection("support_tickets").doc(ticketId).update({
+    status: "waiting_for_customer",
+    updated_at: now,
+  });
+
+  return true;
+}
+
+export async function updateTicketStatus(
+  ticketId: string,
+  newStatus: TicketStatus
+): Promise<boolean> {
+  const { FieldValue } = await import("firebase-admin/firestore");
+  const ticketSnap = await adminDb
+    .collection("support_tickets")
+    .doc(ticketId)
+    .get();
+  if (!ticketSnap.exists) return false;
+
+  await adminDb.collection("support_tickets").doc(ticketId).update({
+    status: newStatus,
+    updated_at: FieldValue.serverTimestamp(),
+  });
+
+  return true;
+}
+
+export async function getTicketStats(appId?: string): Promise<{
+  total: number;
+  open: number;
+  waitingCustomer: number;
+  waitingSupport: number;
+  resolved: number;
+  closed: number;
+}> {
+  const base =
+    appId && appId !== "all"
+      ? adminDb.collection("support_tickets").where("app_id", "==", appId)
+      : adminDb.collection("support_tickets");
+
+  const [totalSnap, openSnap, wcSnap, wsSnap, resolvedSnap, closedSnap] =
+    await Promise.all([
+      base.count().get(),
+      base.where("status", "==", "open").count().get(),
+      base.where("status", "==", "waiting_for_customer").count().get(),
+      base.where("status", "==", "waiting_for_support").count().get(),
+      base.where("status", "==", "resolved").count().get(),
+      base.where("status", "==", "closed").count().get(),
+    ]);
+
+  return {
+    total: totalSnap.data().count,
+    open: openSnap.data().count,
+    waitingCustomer: wcSnap.data().count,
+    waitingSupport: wsSnap.data().count,
+    resolved: resolvedSnap.data().count,
+    closed: closedSnap.data().count,
+  };
 }

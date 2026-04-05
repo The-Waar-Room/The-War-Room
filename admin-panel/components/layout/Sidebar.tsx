@@ -11,6 +11,7 @@ import {
   Cloud,
   Settings,
   Bell,
+  MessageSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -29,6 +30,7 @@ const items = [
   { href: "/ai-usage", label: "AI", icon: Bot },
   { href: "/cloud-usage", label: "Budget", icon: Cloud },
   { href: "/alerts", label: "Alerts", icon: Bell },
+  { href: "/support-tickets", label: "Tickets", icon: MessageSquare },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 

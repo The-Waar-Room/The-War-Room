@@ -7,6 +7,7 @@ import { userRouter } from "./routes/user";
 import { chatRouter } from "./routes/chat";
 import { subscriptionRouter } from "./routes/subscription";
 import { adminRouter } from "./routes/admin";
+import { ticketRouter } from "./routes/ticket";
 
 const app = express();
 
@@ -31,6 +32,7 @@ app.get("/health", (_req, res) => {
 app.use("/api/user", userRouter);
 app.use("/api/chat", chatRouter);
 app.use("/api/subscription", subscriptionRouter);
+app.use("/api/ticket", ticketRouter);
 app.use("/api/admin", adminRouter);
 
 // ── 404 fallback ──
