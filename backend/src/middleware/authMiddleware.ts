@@ -1,4 +1,5 @@
 import { Response, NextFunction } from "express";
+import { FieldValue } from "firebase-admin/firestore";
 import { getAuth, getFirestore } from "../config/firebase";
 import { AuthenticatedRequest, UserDoc } from "../types";
 
@@ -58,7 +59,27 @@ export async function authMiddleware(
     const userSnap = await db.collection("users").doc(req.decodedToken!.uid).get();
 
     if (!userSnap.exists) {
-      res.status(404).json({ success: false, error: "User not registered" });
+      const appId = req.appId;
+      if (!appId) {
+        res.status(404).json({ success: false, error: "User not registered" });
+        return;
+      }
+
+      const now = FieldValue.serverTimestamp();
+      await db
+        .collection("users")
+        .doc(req.decodedToken!.uid)
+        .set({
+          uid: req.decodedToken!.uid,
+          app_id: appId,
+          email: req.decodedToken!.email ?? "",
+          created_at: now,
+          last_seen: now,
+        });
+
+      const createdSnap = await db.collection("users").doc(req.decodedToken!.uid).get();
+      req.user = createdSnap.data() as UserDoc;
+      next();
       return;
     }
 
