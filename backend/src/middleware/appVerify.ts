@@ -28,7 +28,8 @@ export async function appVerify(
     }
 
     const db = getFirestore();
-    const appSnap = await db.collection("apps").doc(appId).get();
+    const normalizedAppId = appId.toLowerCase();
+    const appSnap = await db.collection("apps").doc(normalizedAppId).get();
 
     if (!appSnap.exists) {
       console.warn(`[appVerify] REJECT: App doc not found for appId="${appId}"`);
