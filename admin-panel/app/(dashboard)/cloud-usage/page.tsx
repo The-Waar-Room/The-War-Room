@@ -47,7 +47,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/useToast";
 
-import { INR_RATE } from "@/lib/firestore";
+const INR_RATE = 84;
 
 interface CloudUsageData {
   vertexAi: {
