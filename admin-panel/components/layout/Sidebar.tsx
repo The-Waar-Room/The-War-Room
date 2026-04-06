@@ -30,7 +30,7 @@ const items = [
   { href: "/ai-usage", label: "AI", icon: Bot },
   { href: "/cloud-usage", label: "Budget", icon: Cloud },
   { href: "/alerts", label: "Alerts", icon: Bell },
-  { href: "/support-tickets", label: "Tickets", icon: MessageSquare },
+  { href: "/support-messages", label: "Support", icon: MessageSquare },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 

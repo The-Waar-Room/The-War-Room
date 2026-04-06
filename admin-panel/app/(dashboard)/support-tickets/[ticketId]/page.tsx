@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, use } from "react";
+import { useEffect, useState, use } from "react";
+import { useSession } from "next-auth/react";
 import { useFirestore } from "@/hooks/useFirestore";
 import { useToast } from "@/hooks/useToast";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -62,11 +63,21 @@ export default function TicketDetailPage({
   params: Promise<{ ticketId: string }>;
 }) {
   const { ticketId } = use(params);
+  const { data: session } = useSession();
   const { toast } = useToast();
+  const canReplyAsOwner = session?.user?.role === "owner";
   const [reply, setReply] = useState("");
   const [sending, setSending] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
-  const [replyRole, setReplyRole] = useState<"owner" | "support">("owner");
+  const [replyRole, setReplyRole] = useState<"owner" | "support">("support");
+
+  useEffect(() => {
+    if (canReplyAsOwner) {
+      setReplyRole("owner");
+    } else {
+      setReplyRole("support");
+    }
+  }, [canReplyAsOwner]);
 
   const { data, isLoading, error, mutate } = useFirestore<{
     ticket: SupportTicket;
@@ -133,7 +144,7 @@ export default function TicketDetailPage({
   if (error || !ticket) {
     return (
       <section className="space-y-4">
-        <Link href="/support-tickets">
+        <Link href="/support-messages">
           <Button variant="ghost" size="sm" className="gap-1">
             <ArrowLeft className="h-4 w-4" /> Back
           </Button>
@@ -149,7 +160,7 @@ export default function TicketDetailPage({
     <section className="space-y-5">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <Link href="/support-tickets">
+        <Link href="/support-messages">
           <Button variant="ghost" size="sm" className="gap-1">
             <ArrowLeft className="h-4 w-4" /> Back
           </Button>
@@ -254,10 +265,16 @@ export default function TicketDetailPage({
                 setReplyRole(value as "owner" | "support")
               }
             >
-              <TabsList className="grid w-[220px] grid-cols-2 border border-[#D0D5DD] bg-white">
-                <TabsTrigger value="owner" className="gap-1.5 text-xs">
-                  <Crown className="h-3.5 w-3.5" /> Owner
-                </TabsTrigger>
+              <TabsList
+                className={`grid w-[220px] border border-[#D0D5DD] bg-white ${
+                  canReplyAsOwner ? "grid-cols-2" : "grid-cols-1"
+                }`}
+              >
+                {canReplyAsOwner && (
+                  <TabsTrigger value="owner" className="gap-1.5 text-xs">
+                    <Crown className="h-3.5 w-3.5" /> Owner
+                  </TabsTrigger>
+                )}
                 <TabsTrigger value="support" className="gap-1.5 text-xs">
                   <LifeBuoy className="h-3.5 w-3.5" /> Support
                 </TabsTrigger>

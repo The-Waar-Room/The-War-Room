@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
   Users,
   CreditCard,
@@ -14,6 +15,7 @@ import MessagesChart from "@/components/dashboard/MessagesChart";
 import RevenueChart from "@/components/dashboard/RevenueChart";
 import StatCard from "@/components/dashboard/StatCard";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useFirestore } from "@/hooks/useFirestore";
 import { useSelectedApp } from "@/hooks/useSelectedApp";
@@ -196,6 +198,26 @@ export default function DashboardClient() {
           }
         />
       </div>
+
+      <Card className="border-[#B2CCFF] bg-gradient-to-r from-[#EEF4FF] via-[#F8FAFF] to-white">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-semibold text-[#0F172A]">
+            Support Messages Panel
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <p className="text-xs text-[#475467]">
+            Check Firestore support conversations, review pending customer
+            issues, and reply directly as owner from one place.
+          </p>
+          <Link href="/support-messages" className="inline-flex">
+            <Button size="sm" className="gap-1.5 text-xs">
+              <MessageSquare className="h-3.5 w-3.5" />
+              Open Support Messages
+            </Button>
+          </Link>
+        </CardContent>
+      </Card>
 
       {/* Top Users by Cost */}
       {data.topUsers && data.topUsers.length > 0 && (
