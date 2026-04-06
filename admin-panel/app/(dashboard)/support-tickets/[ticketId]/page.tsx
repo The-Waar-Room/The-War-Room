@@ -15,6 +15,8 @@ import {
   User,
   Headphones,
   RefreshCw,
+  Crown,
+  LifeBuoy,
 } from "lucide-react";
 import type {
   SupportTicket,
@@ -22,6 +24,7 @@ import type {
   TicketStatus,
 } from "@/lib/firestore";
 import Link from "next/link";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const statusOptions: { value: TicketStatus; label: string }[] = [
   { value: "open", label: "Open" },
@@ -63,6 +66,7 @@ export default function TicketDetailPage({
   const [reply, setReply] = useState("");
   const [sending, setSending] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [replyRole, setReplyRole] = useState<"owner" | "support">("owner");
 
   const { data, isLoading, error, mutate } = useFirestore<{
     ticket: SupportTicket;
@@ -76,14 +80,20 @@ export default function TicketDetailPage({
     if (!reply.trim()) return;
     setSending(true);
     try {
+      const outgoingMessage =
+        replyRole === "owner" ? `[Owner] ${reply.trim()}` : reply.trim();
+
       const res = await fetch(`/api/admin/support-tickets/${ticketId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "reply", message: reply.trim() }),
+        body: JSON.stringify({ action: "reply", message: outgoingMessage }),
       });
       if (!res.ok) throw new Error("Failed");
       setReply("");
-      toast({ title: "Reply sent" });
+      toast({
+        title:
+          replyRole === "owner" ? "Owner reply sent" : "Support reply sent",
+      });
       mutate();
     } catch {
       toast({ title: "Failed to send reply", variant: "destructive" });
@@ -145,7 +155,9 @@ export default function TicketDetailPage({
           </Button>
         </Link>
         <div className="flex-1">
-          <h1 className="text-lg font-bold md:text-xl">{ticket.subject}</h1>
+          <h1 className="text-lg font-bold text-[#0F172A] md:text-xl">
+            {ticket.subject}
+          </h1>
           <p className="text-xs text-muted-foreground">
             {ticket.ticket_id} · {ticket.email} · {ticket.app_id}
             {ticket.version ? ` v${ticket.version}` : ""}
@@ -222,6 +234,63 @@ export default function TicketDetailPage({
                 {s.label}
               </Button>
             ))}
+        </CardContent>
+      </Card>
+
+      <Card className="border-[#B2CCFF] bg-gradient-to-r from-[#EEF4FF] via-[#F8FAFF] to-white">
+        <CardContent className="space-y-3 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-semibold text-[#0F172A]">
+                Direct User Chat Panel
+              </p>
+              <p className="text-xs text-[#475467]">
+                Choose who is replying, then send a direct response to the user.
+              </p>
+            </div>
+            <Tabs
+              value={replyRole}
+              onValueChange={(value) =>
+                setReplyRole(value as "owner" | "support")
+              }
+            >
+              <TabsList className="grid w-[220px] grid-cols-2 border border-[#D0D5DD] bg-white">
+                <TabsTrigger value="owner" className="gap-1.5 text-xs">
+                  <Crown className="h-3.5 w-3.5" /> Owner
+                </TabsTrigger>
+                <TabsTrigger value="support" className="gap-1.5 text-xs">
+                  <LifeBuoy className="h-3.5 w-3.5" /> Support
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="text-xs"
+              onClick={() =>
+                setReply("Thanks for reporting this. We are checking it now.")
+              }
+            >
+              Use acknowledgement template
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="text-xs"
+              onClick={() =>
+                setReply(
+                  "We fixed this in the latest build. Please update and confirm."
+                )
+              }
+            >
+              Use resolution template
+            </Button>
+          </div>
         </CardContent>
       </Card>
 
@@ -312,7 +381,7 @@ export default function TicketDetailPage({
         <Card>
           <CardContent className="flex gap-2 p-4">
             <Input
-              placeholder="Type your reply to the customer…"
+              placeholder={`Type your ${replyRole} reply to the customer…`}
               value={reply}
               onChange={(e) => setReply(e.target.value)}
               onKeyDown={(e) =>
@@ -328,7 +397,7 @@ export default function TicketDetailPage({
               className="gap-1.5"
             >
               <Send className="h-3.5 w-3.5" />
-              Reply
+              {replyRole === "owner" ? "Reply as Owner" : "Reply as Support"}
             </Button>
           </CardContent>
         </Card>

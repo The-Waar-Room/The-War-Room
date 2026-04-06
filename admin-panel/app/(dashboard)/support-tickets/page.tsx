@@ -22,9 +22,12 @@ import {
   CheckCircle2,
   XCircle,
   AlertCircle,
+  Sparkles,
+  Inbox,
 } from "lucide-react";
 import type { SupportTicket, TicketStatus } from "@/lib/firestore";
 import Link from "next/link";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const PAGE_SIZE = 25;
 
@@ -95,6 +98,7 @@ export default function SupportTicketsPage() {
   const { selectedApp } = useSelectedApp();
   const [statusFilter, setStatusFilter] = useState("");
   const [offset, setOffset] = useState(0);
+  const [activeTab, setActiveTab] = useState<"all" | "owner">("all");
 
   const appParam = selectedApp !== "all" ? `&app=${selectedApp}` : "";
   const statusParam = statusFilter ? `&status=${statusFilter}` : "";
@@ -115,26 +119,41 @@ export default function SupportTicketsPage() {
   );
 
   const stats = data?.stats;
+  const ownerQueue = (data?.tickets ?? []).filter(
+    (ticket) =>
+      ticket.status === "open" || ticket.status === "waiting_for_support"
+  );
+  const visibleTickets =
+    activeTab === "owner" ? ownerQueue : (data?.tickets ?? []);
 
   return (
     <section className="space-y-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold md:text-2xl">Support Tickets</h1>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            {data ? `${data.total} tickets` : "Loading..."}
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => mutate()}
-          className="gap-1.5"
-        >
-          <RefreshCw className="h-3.5 w-3.5" />
-          Refresh
-        </Button>
-      </div>
+      <Card className="overflow-hidden border-[#B9CCFF] bg-gradient-to-r from-[#EEF4FF] via-[#F8FAFF] to-white shadow-sm">
+        <CardContent className="flex flex-col gap-3 p-5 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p className="mb-1 inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#155EEF]">
+              <Sparkles className="h-3 w-3" /> Support Operations
+            </p>
+            <h1 className="text-xl font-bold text-[#0F172A] md:text-2xl">
+              Support Tickets
+            </h1>
+            <p className="mt-0.5 text-xs text-[#475467]">
+              {data
+                ? `${data.total} total tickets`
+                : "Loading support queue..."}
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => mutate()}
+            className="gap-1.5 border-[#B9CCFF] bg-white text-[#1D2939] hover:bg-[#EEF4FF]"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            Refresh Queue
+          </Button>
+        </CardContent>
+      </Card>
 
       {/* Stats cards */}
       {stats && (
@@ -180,23 +199,45 @@ export default function SupportTicketsPage() {
         </div>
       )}
 
-      {/* Status filter tabs */}
-      <div className="flex flex-wrap gap-1.5">
-        {statusFilters.map((f) => (
-          <Button
-            key={f.value}
-            variant={statusFilter === f.value ? "default" : "outline"}
-            size="sm"
-            className="text-xs"
-            onClick={() => {
-              setStatusFilter(f.value);
-              setOffset(0);
-            }}
-          >
-            {f.label}
-          </Button>
-        ))}
-      </div>
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) => setActiveTab(value as "all" | "owner")}
+        className="space-y-4"
+      >
+        <TabsList className="grid w-full grid-cols-2 border border-[#D0D5DD] bg-white md:w-[360px]">
+          <TabsTrigger value="all" className="gap-1.5 text-xs">
+            <MessageSquare className="h-3.5 w-3.5" /> All Tickets
+          </TabsTrigger>
+          <TabsTrigger value="owner" className="gap-1.5 text-xs">
+            <Inbox className="h-3.5 w-3.5" /> Owner Inbox ({ownerQueue.length})
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="all" className="space-y-4">
+          <div className="flex flex-wrap gap-1.5">
+            {statusFilters.map((f) => (
+              <Button
+                key={f.value}
+                variant={statusFilter === f.value ? "default" : "outline"}
+                size="sm"
+                className="text-xs"
+                onClick={() => {
+                  setStatusFilter(f.value);
+                  setOffset(0);
+                }}
+              >
+                {f.label}
+              </Button>
+            ))}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="owner" className="mt-0">
+          <p className="text-xs text-[#475467]">
+            Priority queue for owner responses: Open + Waiting Support tickets.
+          </p>
+        </TabsContent>
+      </Tabs>
 
       {isLoading && (
         <div className="space-y-2">
@@ -212,7 +253,7 @@ export default function SupportTicketsPage() {
         </div>
       )}
 
-      {data?.tickets && (
+      {data && (
         <div className="overflow-x-auto rounded-lg border">
           <Table>
             <TableHeader>
@@ -227,17 +268,19 @@ export default function SupportTicketsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {data.tickets.length === 0 && (
+              {visibleTickets.length === 0 && (
                 <TableRow>
                   <TableCell
                     colSpan={7}
                     className="py-8 text-center text-muted-foreground"
                   >
-                    No tickets found.
+                    {activeTab === "owner"
+                      ? "Owner inbox is clear right now."
+                      : "No tickets found."}
                   </TableCell>
                 </TableRow>
               )}
-              {data.tickets.map((ticket) => {
+              {visibleTickets.map((ticket) => {
                 const sc = statusConfig[ticket.status];
                 const Icon = sc.icon;
                 return (
