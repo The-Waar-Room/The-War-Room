@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
+import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useFirestore } from "@/hooks/useFirestore";
 import { useToast } from "@/hooks/useToast";
@@ -60,9 +60,9 @@ function formatTime(iso?: string | null) {
 export default function TicketDetailPage({
   params,
 }: {
-  params: Promise<{ ticketId: string }>;
+  params: { ticketId: string };
 }) {
-  const { ticketId } = use(params);
+  const { ticketId } = params;
   const { data: session } = useSession();
   const { toast } = useToast();
   const canReplyAsOwner = session?.user?.role === "owner";
@@ -248,14 +248,12 @@ export default function TicketDetailPage({
         </CardContent>
       </Card>
 
-      <Card className="border-[#B2CCFF] bg-gradient-to-r from-[#EEF4FF] via-[#F8FAFF] to-white">
+      <Card>
         <CardContent className="space-y-3 p-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <p className="text-sm font-semibold text-[#0F172A]">
-                Direct User Chat Panel
-              </p>
-              <p className="text-xs text-[#475467]">
+              <p className="text-sm font-semibold">Direct User Chat Panel</p>
+              <p className="text-xs text-muted-foreground">
                 Choose who is replying, then send a direct response to the user.
               </p>
             </div>

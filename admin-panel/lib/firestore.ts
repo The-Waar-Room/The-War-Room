@@ -987,7 +987,6 @@ export async function getAlerts(appId: string = "all"): Promise<AlertItem[]> {
         const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
         return adminDb
           .collection("chat_events")
-          .where("status", "==", "error")
           .where("created_at", ">=", oneDayAgo)
           .get();
       })(),
@@ -1071,7 +1070,12 @@ export async function getAlerts(appId: string = "all"): Promise<AlertItem[]> {
   }
 
   // 5. Recent errors (last 24h)
-  const errorCount = chatEventsSnap.size;
+  const errorCount = chatEventsSnap.docs.filter((doc) => {
+    const data = doc.data();
+    if (data.status !== "error") return false;
+    if (appId !== "all" && data.app_id !== appId) return false;
+    return true;
+  }).length;
   if (errorCount > 0) {
     alerts.push({
       id: "recent-errors",

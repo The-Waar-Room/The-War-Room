@@ -22,8 +22,8 @@ import {
   CheckCircle2,
   XCircle,
   AlertCircle,
-  Sparkles,
   Inbox,
+  Crown,
 } from "lucide-react";
 import type { SupportTicket, TicketStatus } from "@/lib/firestore";
 import Link from "next/link";
@@ -128,16 +128,11 @@ export default function SupportTicketsPage() {
 
   return (
     <section className="space-y-5">
-      <Card className="overflow-hidden border-[#B9CCFF] bg-gradient-to-r from-[#EEF4FF] via-[#F8FAFF] to-white shadow-sm">
+      <Card>
         <CardContent className="flex flex-col gap-3 p-5 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="mb-1 inline-flex items-center gap-1 rounded-full bg-white px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[#155EEF]">
-              <Sparkles className="h-3 w-3" /> Support Operations
-            </p>
-            <h1 className="text-xl font-bold text-[#0F172A] md:text-2xl">
-              Support Tickets
-            </h1>
-            <p className="mt-0.5 text-xs text-[#475467]">
+            <h1 className="text-xl font-bold md:text-2xl">Support Messages</h1>
+            <p className="mt-0.5 text-xs text-muted-foreground">
               {data
                 ? `${data.total} total tickets`
                 : "Loading support queue..."}
@@ -147,7 +142,7 @@ export default function SupportTicketsPage() {
             variant="outline"
             size="sm"
             onClick={() => mutate()}
-            className="gap-1.5 border-[#B9CCFF] bg-white text-[#1D2939] hover:bg-[#EEF4FF]"
+            className="gap-1.5"
           >
             <RefreshCw className="h-3.5 w-3.5" />
             Refresh Queue
@@ -233,7 +228,7 @@ export default function SupportTicketsPage() {
         </TabsContent>
 
         <TabsContent value="owner" className="mt-0">
-          <p className="text-xs text-[#475467]">
+          <p className="text-xs text-muted-foreground">
             Priority queue for owner responses: Open + Waiting Support tickets.
           </p>
         </TabsContent>
@@ -264,7 +259,7 @@ export default function SupportTicketsPage() {
                 <TableHead>Status</TableHead>
                 <TableHead>Priority</TableHead>
                 <TableHead>Updated</TableHead>
-                <TableHead />
+                <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -304,12 +299,21 @@ export default function SupportTicketsPage() {
                     <TableCell className="text-xs text-muted-foreground">
                       {relativeTime(ticket.updated_at)}
                     </TableCell>
-                    <TableCell>
-                      <Link href={`/support-tickets/${ticket.ticket_id}`}>
+                    <TableCell className="space-x-2">
+                      <Link href={`/support-messages/${ticket.ticket_id}`}>
                         <Button variant="ghost" size="sm" className="text-xs">
                           View
                         </Button>
                       </Link>
+                      {(ticket.status === "open" ||
+                        ticket.status === "waiting_for_support") && (
+                        <Link href={`/support-messages/${ticket.ticket_id}`}>
+                          <Button size="sm" className="gap-1 text-xs">
+                            <Crown className="h-3 w-3" />
+                            Owner Response
+                          </Button>
+                        </Link>
+                      )}
                     </TableCell>
                   </TableRow>
                 );
