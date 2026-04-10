@@ -5,6 +5,7 @@ import { authMiddleware } from "../middleware/authMiddleware";
 import { killSwitch } from "../middleware/killSwitch";
 import { rateLimiter } from "../middleware/rateLimiter";
 import { chat } from "../services/geminiService";
+import { moderateChatMessage } from "../services/chatModerationService";
 import { trackUsage } from "../services/usageService";
 import { writeChatEvent } from "../services/chatEventService";
 import { AuthenticatedRequest, ChatRequestBody } from "../types";
@@ -50,8 +51,41 @@ chatRouter.post(
       const contextJson = context ? JSON.stringify(context) : "";
       const contextPreview = contextJson.slice(0, 512);
       const contextHash = createHash("sha256").update(contextJson).digest("hex");
+      const promptPreview = message.slice(0, 160);
 
       const requestStart = Date.now();
+      const moderation = moderateChatMessage(message, appId, appName);
+
+      if (moderation.action !== "allow") {
+        res.json({
+          success: true,
+          response: moderation.response,
+          followUpSuggestions: moderation.followUpSuggestions ?? [],
+          usage: null,
+          moderation: {
+            action: moderation.action,
+            category: moderation.category,
+          },
+        });
+
+        writeChatEvent({
+          userId,
+          appId,
+          sessionId,
+          promptPreview,
+          response: moderation.response ?? "",
+          contextPreview,
+          contextHash,
+          tokenInput: 0,
+          tokenOutput: 0,
+          planType,
+          status: "success",
+          latencyMs: Date.now() - requestStart,
+          moderationAction: moderation.action,
+          moderationCategory: moderation.category,
+        }).catch((err: unknown) => console.error("[chat] writeChatEvent failed:", err));
+        return;
+      }
 
       // ── Call Gemini ──
       const result = await chat({
@@ -97,6 +131,7 @@ chatRouter.post(
       res.json({
         success: true,
         response: result.response,
+        followUpSuggestions: result.followUpSuggestions,
         usage,
       });
 
@@ -105,7 +140,7 @@ chatRouter.post(
         userId,
         appId,
         sessionId,
-        prompt: message,
+        promptPreview,
         response: result.response,
         contextPreview,
         contextHash,
@@ -114,6 +149,8 @@ chatRouter.post(
         planType,
         status: "success",
         latencyMs: Date.now() - requestStart,
+        moderationAction: moderation.action,
+        moderationCategory: moderation.category,
       }).catch((err: unknown) => console.error("[chat] writeChatEvent failed:", err));
     } catch (err) {
       console.error("[chat] Error:", err);

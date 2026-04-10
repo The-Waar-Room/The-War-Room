@@ -91,11 +91,16 @@ export interface AuthenticatedRequest extends Request {
 export interface ChatResponse {
   success: boolean;
   response: string;
+  followUpSuggestions?: string[];
   usage: {
     messagesUsedToday: number;
     dailyLimit: number;
     remaining: number;
     plan: PlanType;
+  } | null;
+  moderation?: {
+    action: "allow" | "soft_redirect" | "block";
+    category: string;
   };
 }
 
@@ -136,6 +141,8 @@ export interface ChatEventDoc {
   cost_usd: number;
   plan_type: PlanType;
   status: "success" | "error";
+  moderation_action?: "allow" | "soft_redirect" | "block";
+  moderation_category?: string;
   latency_ms: number;
   created_at: FirebaseFirestore.Timestamp;
   expires_at: Date; // 30-day TTL field for Firestore

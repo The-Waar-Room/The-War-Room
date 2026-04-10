@@ -12,7 +12,7 @@ interface WriteChatEventParams {
   userId: string;
   appId: string;
   sessionId: string;
-  prompt: string;
+  promptPreview: string;
   response: string;
   contextPreview: string;
   contextHash: string;
@@ -21,6 +21,8 @@ interface WriteChatEventParams {
   planType: PlanType;
   status: "success" | "error";
   latencyMs: number;
+  moderationAction?: "allow" | "soft_redirect" | "block";
+  moderationCategory?: string;
 }
 
 /**
@@ -39,7 +41,7 @@ export async function writeChatEvent(params: WriteChatEventParams): Promise<void
     user_id: params.userId,
     app_id: params.appId,
     session_id: params.sessionId,
-    prompt: params.prompt,
+    prompt: params.promptPreview,
     response: params.response,
     context_preview: params.contextPreview,
     context_hash: params.contextHash,
@@ -49,6 +51,8 @@ export async function writeChatEvent(params: WriteChatEventParams): Promise<void
     plan_type: params.planType,
     status: params.status,
     latency_ms: params.latencyMs,
+    moderation_action: params.moderationAction ?? "allow",
+    moderation_category: params.moderationCategory ?? "none",
     created_at: FieldValue.serverTimestamp(),
     expires_at: expiresAt,
   });
