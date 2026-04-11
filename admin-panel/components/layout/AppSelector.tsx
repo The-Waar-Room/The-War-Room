@@ -2,6 +2,7 @@
 
 import { ChevronDown, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,17 +14,23 @@ interface AppSelectorProps {
   value: string;
   onChange: (value: string) => void;
   apps: Array<{ id: string; label: string }>;
+  allLabel?: string;
+  className?: string;
+  contentClassName?: string;
 }
 
 export default function AppSelector({
   value,
   onChange,
   apps,
+  allLabel = "All Apps",
+  className,
+  contentClassName,
 }: AppSelectorProps) {
   const selected = apps.find((a) => a.id === value);
-  const label = selected?.label ?? "All Apps";
+  const label = selected?.label ?? allLabel;
 
-  const options = [{ id: "all", label: "All Apps" }, ...apps];
+  const options = [{ id: "all", label: allLabel }, ...apps];
 
   return (
     <DropdownMenu>
@@ -31,13 +38,19 @@ export default function AppSelector({
         <Button
           variant="outline"
           size="sm"
-          className="w-full justify-between gap-2 text-sm font-normal"
+          className={cn(
+            "w-full justify-between gap-2 text-sm font-normal",
+            className
+          )}
         >
           <span className="truncate">{label}</span>
           <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-50" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-[200px]">
+      <DropdownMenuContent
+        align="start"
+        className={cn("w-[200px]", contentClassName)}
+      >
         {options.map((app) => (
           <DropdownMenuItem
             key={app.id}

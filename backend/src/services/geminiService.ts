@@ -21,6 +21,42 @@ interface GeminiChatResult {
   tokenInput: number;
   tokenOutput: number;
 }
+
+function sanitizeFollowUpSuggestion(value: string): string {
+  return value.replace(/^[-*\u2022\d.\s]+/, "").trim();
+}
+
+function extractLegacyFollowUps(rawText: string): {
+  answer: string;
+  followUpSuggestions: string[];
+} {
+  const lines = rawText
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const bulletIndexes = lines
+    .map((line, index) => ({ line, index }))
+    .filter(({ line }) => /^[-*\u2022]/.test(line) || /^\d+[.)]\s+/.test(line));
+
+  if (bulletIndexes.length < 2) {
+    return { answer: rawText.trim(), followUpSuggestions: [] };
+  }
+
+  const firstBulletIndex = bulletIndexes[0].index;
+  const followUpSuggestions = bulletIndexes
+    .map(({ line }) => sanitizeFollowUpSuggestion(line))
+    .filter(Boolean)
+    .filter((line, index, all) => all.indexOf(line) === index)
+    .slice(0, 3);
+
+  const answer = lines.slice(0, firstBulletIndex).join("\n").trim();
+  return {
+    answer: answer.length === 0 ? rawText.trim() : answer,
+    followUpSuggestions,
+  };
+}
+
 function parseStructuredChatOutput(
   rawText: string,
   message: string,
@@ -36,16 +72,25 @@ function parseStructuredChatOutput(
 
   const parsedFollowUps = (followUpsMatch?.[1] ?? "")
     .split("\n")
-    .map((line) => line.replace(/^[-*\d.\s]+/, "").trim())
+    .map((line) => sanitizeFollowUpSuggestion(line))
     .filter(Boolean)
     .filter((line, index, all) => all.indexOf(line) === index)
     .slice(0, 3);
 
+  const legacyParsed =
+    answerMatch == null && followUpsMatch == null ? extractLegacyFollowUps(rawText) : null;
+
+  const cleanedAnswer = legacyParsed?.answer ?? answer;
+  const cleanedFollowUps =
+    parsedFollowUps.length > 0 ? parsedFollowUps : (legacyParsed?.followUpSuggestions ?? []);
+
   const followUpSuggestions =
-    parsedFollowUps.length >= 2 ? parsedFollowUps : fallbackFollowUps(message, answer).slice(0, 3);
+    cleanedFollowUps.length >= 2
+      ? cleanedFollowUps
+      : fallbackFollowUps(message, cleanedAnswer).slice(0, 3);
 
   return {
-    answer,
+    answer: cleanedAnswer,
     followUpSuggestions,
   };
 }
@@ -55,7 +100,8 @@ function parseStructuredChatOutput(
  * and returns the AI response with token counts.
  */
 export async function chat(params: GeminiChatParams): Promise<GeminiChatResult> {
-  const { appId, appName, message, context, planType, maxInputTokens, maxOutputTokens, history } = params;
+  const { appId, appName, message, context, planType, maxInputTokens, maxOutputTokens, history } =
+    params;
   const appProfile = getChatAppProfile(appId, appName);
 
   // ── Build system prompt ──

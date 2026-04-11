@@ -19,14 +19,21 @@ const WELLNESS_KEYWORDS = [
 ];
 
 const BLOCK_PATTERNS: Array<{ pattern: RegExp; category: string }> = [
-  { pattern: /\b(?:nude|nudes|porn|porno|sex(?:ting)?|blowjob|handjob|fuck(?:ing)?|anal|dick|penis|vagina|pussy|cum(?:shot)?|horny)\b/i, category: "explicit" },
+  {
+    pattern:
+      /\b(?:nude|nudes|porn|porno|sex(?:ting)?|blowjob|handjob|fuck(?:ing)?|anal|dick|penis|vagina|pussy|cum(?:shot)?|horny)\b/i,
+    category: "explicit",
+  },
   { pattern: /\b(?:slut|whore|bitch|asshole|bastard)\b/i, category: "abuse" },
   { pattern: /\b(?:kill yourself|go die|rape|molest)\b/i, category: "abuse" },
 ];
 
 const REDIRECT_PATTERNS: Array<{ pattern: RegExp; category: string }> = [
   { pattern: /\b(?:write|fix|debug|code|program|implement)\b/i, category: "coding" },
-  { pattern: /\b(?:stocks?|crypto|bitcoin|trading|investing|share market)\b/i, category: "finance" },
+  {
+    pattern: /\b(?:stocks?|crypto|bitcoin|trading|investing|share market)\b/i,
+    category: "finance",
+  },
   { pattern: /\b(?:diagnose|symptom|treatment|prescription|medicine)\b/i, category: "medical" },
   { pattern: /\b(?:lawsuit|legal advice|attorney|court|contract)\b/i, category: "legal" },
   { pattern: /\b(?:homework|essay|assignment|exam answer)\b/i, category: "homework" },
@@ -41,7 +48,11 @@ export interface ModerationResult {
   followUpSuggestions?: string[];
 }
 
-export function moderateChatMessage(message: string, appId: string, appName: string): ModerationResult {
+export function moderateChatMessage(
+  message: string,
+  appId: string,
+  appName: string
+): ModerationResult {
   const normalized = message.trim();
   const lower = normalized.toLowerCase();
   const appProfile = getChatAppProfile(appId, appName);
