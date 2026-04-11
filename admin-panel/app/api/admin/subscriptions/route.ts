@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { normalizeAdminAppId } from "@/lib/admin-apps";
 import { getSubscriptions, getSubscriptionStats } from "@/lib/firestore";
 
 export async function GET(request: Request) {
@@ -9,7 +10,7 @@ export async function GET(request: Request) {
   }
 
   const { searchParams } = new URL(request.url);
-  const appId = searchParams.get("app") || undefined;
+  const appId = normalizeAdminAppId(searchParams.get("app"));
   const status = searchParams.get("status") || undefined;
 
   const [subscriptions, stats] = await Promise.all([

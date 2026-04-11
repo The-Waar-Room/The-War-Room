@@ -15,6 +15,7 @@ interface AppSelectorProps {
   onChange: (value: string) => void;
   apps: Array<{ id: string; label: string }>;
   allLabel?: string;
+  includeAllOption?: boolean;
   className?: string;
   contentClassName?: string;
 }
@@ -24,13 +25,16 @@ export default function AppSelector({
   onChange,
   apps,
   allLabel = "All Apps",
+  includeAllOption = true,
   className,
   contentClassName,
 }: AppSelectorProps) {
   const selected = apps.find((a) => a.id === value);
   const label = selected?.label ?? allLabel;
 
-  const options = [{ id: "all", label: allLabel }, ...apps];
+  const options = includeAllOption
+    ? [{ id: "all", label: allLabel }, ...apps]
+    : apps;
 
   return (
     <DropdownMenu>

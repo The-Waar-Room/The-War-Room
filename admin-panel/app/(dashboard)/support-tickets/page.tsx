@@ -26,6 +26,7 @@ import {
   Crown,
 } from "lucide-react";
 import type { SupportTicket, TicketStatus } from "@/lib/firestore";
+import { getAdminAppHref } from "@/lib/admin-apps";
 import Link from "next/link";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -100,7 +101,7 @@ export default function SupportTicketsPage() {
   const [offset, setOffset] = useState(0);
   const [activeTab, setActiveTab] = useState<"all" | "owner">("all");
 
-  const appParam = selectedApp !== "all" ? `&app=${selectedApp}` : "";
+  const appParam = `&app=${selectedApp}`;
   const statusParam = statusFilter ? `&status=${statusFilter}` : "";
   const { data, isLoading, error, mutate } = useFirestore<{
     tickets: SupportTicket[];
@@ -300,14 +301,24 @@ export default function SupportTicketsPage() {
                       {relativeTime(ticket.updated_at)}
                     </TableCell>
                     <TableCell className="space-x-2">
-                      <Link href={`/support-messages/${ticket.ticket_id}`}>
+                      <Link
+                        href={getAdminAppHref(
+                          `/support-messages/${ticket.ticket_id}`,
+                          selectedApp
+                        )}
+                      >
                         <Button variant="ghost" size="sm" className="text-xs">
                           View
                         </Button>
                       </Link>
                       {(ticket.status === "open" ||
                         ticket.status === "waiting_for_support") && (
-                        <Link href={`/support-messages/${ticket.ticket_id}`}>
+                        <Link
+                          href={getAdminAppHref(
+                            `/support-messages/${ticket.ticket_id}`,
+                            selectedApp
+                          )}
+                        >
                           <Button size="sm" className="gap-1 text-xs">
                             <Crown className="h-3 w-3" />
                             Owner Response

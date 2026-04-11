@@ -46,7 +46,7 @@ const severityConfig: Record<
 
 export default function AlertsPage() {
   const { selectedApp } = useSelectedApp();
-  const appParam = selectedApp !== "all" ? `?app=${selectedApp}` : "";
+  const appParam = `?app=${selectedApp}`;
   const { data, isLoading, error, mutate } = useFirestore<{
     alerts: AlertItem[];
   }>(`/api/admin/alerts${appParam}`, 60000);

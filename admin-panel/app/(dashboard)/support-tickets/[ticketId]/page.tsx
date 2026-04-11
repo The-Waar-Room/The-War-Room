@@ -24,6 +24,8 @@ import type {
   TicketMessage,
   TicketStatus,
 } from "@/lib/firestore";
+import { useSelectedApp } from "@/hooks/useSelectedApp";
+import { getAdminAppHref } from "@/lib/admin-apps";
 import Link from "next/link";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -63,6 +65,7 @@ export default function TicketDetailPage({
   params: { ticketId: string };
 }) {
   const { ticketId } = params;
+  const { selectedApp } = useSelectedApp();
   const { data: session } = useSession();
   const { toast } = useToast();
   const canReplyAsOwner = session?.user?.role === "owner";
@@ -144,7 +147,7 @@ export default function TicketDetailPage({
   if (error || !ticket) {
     return (
       <section className="space-y-4">
-        <Link href="/support-messages">
+        <Link href={getAdminAppHref("/support-messages", selectedApp)}>
           <Button variant="ghost" size="sm" className="gap-1">
             <ArrowLeft className="h-4 w-4" /> Back
           </Button>
@@ -160,7 +163,7 @@ export default function TicketDetailPage({
     <section className="space-y-5">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <Link href="/support-messages">
+        <Link href={getAdminAppHref("/support-messages", selectedApp)}>
           <Button variant="ghost" size="sm" className="gap-1">
             <ArrowLeft className="h-4 w-4" /> Back
           </Button>

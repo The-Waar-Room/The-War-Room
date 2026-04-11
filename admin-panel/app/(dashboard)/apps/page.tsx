@@ -5,6 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import type { AppInfo } from "@/lib/firestore";
+import { ADMIN_APPS, getAdminAppLabel, isAdminAppId } from "@/lib/admin-apps";
 
 interface AppWithStats extends AppInfo {
   userCount: number;
@@ -27,13 +28,18 @@ export default function AppsPage() {
     "/api/admin/apps",
     30000
   );
+  const allowedAppIds = new Set(ADMIN_APPS.map((app) => app.id));
+  const apps =
+    data?.apps?.filter(
+      (app) => isAdminAppId(app.app_id) && allowedAppIds.has(app.app_id)
+    ) ?? [];
 
   return (
     <section className="space-y-5">
       <div>
         <h1 className="text-xl font-bold md:text-2xl">Apps</h1>
         <p className="mt-0.5 text-xs text-muted-foreground">
-          All registered applications
+          Active products shown in this admin panel
         </p>
       </div>
 
@@ -52,12 +58,14 @@ export default function AppsPage() {
 
       {data?.apps && (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {data.apps.map((app) => (
+          {apps.map((app) => (
             <Card key={app.id} className="transition-shadow hover:shadow-md">
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
                   <div>
-                    <CardTitle className="text-base">{app.app_name}</CardTitle>
+                    <CardTitle className="text-base">
+                      {getAdminAppLabel(app.app_id)}
+                    </CardTitle>
                     <p className="mt-0.5 text-xs text-muted-foreground">
                       {app.platform} · {app.app_id}
                     </p>
@@ -105,11 +113,12 @@ export default function AppsPage() {
         </div>
       )}
 
-      {data?.apps?.length === 0 && (
+      {apps.length === 0 && (
         <Card className="border-dashed">
           <CardContent className="py-8 text-center text-sm text-muted-foreground">
-            No apps registered yet. Add an app document in the{" "}
-            <code className="rounded bg-muted px-1 text-xs">apps</code>{" "}
+            No supported apps found. Add deScroll or SoulLens app documents in
+            the
+            <code className="mx-1 rounded bg-muted px-1 text-xs">apps</code>
             Firestore collection.
           </CardContent>
         </Card>

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { normalizeAdminAppId } from "@/lib/admin-apps";
 import { getAlerts } from "@/lib/firestore";
 
 export async function GET(request: Request) {
@@ -10,7 +11,7 @@ export async function GET(request: Request) {
 
   try {
     const { searchParams } = new URL(request.url);
-    const appId = searchParams.get("app") || "all";
+    const appId = normalizeAdminAppId(searchParams.get("app"));
     const alerts = await getAlerts(appId);
     return NextResponse.json({ alerts });
   } catch (err) {

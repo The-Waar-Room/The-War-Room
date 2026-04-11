@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { normalizeAdminAppId } from "@/lib/admin-apps";
 import { getDashboardSummary, getTopUsersByCost } from "@/lib/firestore";
 
 export async function GET(request: Request) {
@@ -13,7 +14,7 @@ export async function GET(request: Request) {
   }
 
   const { searchParams } = new URL(request.url);
-  const appId = searchParams.get("app") || "all";
+  const appId = normalizeAdminAppId(searchParams.get("app"));
 
   const [summary, topUsers] = await Promise.all([
     getDashboardSummary(appId),

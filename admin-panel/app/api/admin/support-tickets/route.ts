@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { normalizeAdminAppId } from "@/lib/admin-apps";
 import { getSupportTickets, getTicketStats } from "@/lib/firestore";
 
 export async function GET(request: Request) {
@@ -10,7 +11,7 @@ export async function GET(request: Request) {
 
   try {
     const { searchParams } = new URL(request.url);
-    const appId = searchParams.get("app") || undefined;
+    const appId = normalizeAdminAppId(searchParams.get("app"));
     const status = searchParams.get("status") || undefined;
     const limit = Math.min(parseInt(searchParams.get("limit") || "50"), 200);
     const offset = parseInt(searchParams.get("offset") || "0");

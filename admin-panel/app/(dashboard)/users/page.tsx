@@ -17,6 +17,7 @@ import {
 import type { UserInfo } from "@/lib/firestore";
 import { useSelectedApp } from "@/hooks/useSelectedApp";
 import Link from "next/link";
+import { getAdminAppHref } from "@/lib/admin-apps";
 
 const PAGE_SIZE = 25;
 
@@ -34,7 +35,7 @@ export default function UsersPage() {
   const [offset, setOffset] = useState(0);
   const [search, setSearch] = useState("");
 
-  const appParam = selectedApp !== "all" ? `&app=${selectedApp}` : "";
+  const appParam = `&app=${selectedApp}`;
   const { data, isLoading, error } = useFirestore<{
     users: UserInfo[];
     total: number;
@@ -111,7 +112,7 @@ export default function UsersPage() {
                   </TableCell>
                   <TableCell>
                     <Link
-                      href={`/users/${user.id}`}
+                      href={getAdminAppHref(`/users/${user.id}`, selectedApp)}
                       className="text-xs font-medium text-primary hover:underline"
                     >
                       View

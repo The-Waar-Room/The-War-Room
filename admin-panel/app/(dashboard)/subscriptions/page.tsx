@@ -36,7 +36,7 @@ function ts(seconds?: number) {
 
 export default function SubscriptionsPage() {
   const { selectedApp } = useSelectedApp();
-  const appParam = selectedApp !== "all" ? `?app=${selectedApp}` : "";
+  const appParam = `?app=${selectedApp}`;
   const { data, isLoading, error } = useFirestore<SubsResponse>(
     `/api/admin/subscriptions${appParam}`,
     30000

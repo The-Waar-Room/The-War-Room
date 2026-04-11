@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
 import {
   LayoutDashboard,
-  AppWindow,
   Users,
   CreditCard,
   Bot,
@@ -17,10 +16,10 @@ import {
   LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useFirestore } from "@/hooks/useFirestore";
 import { useSelectedApp } from "@/hooks/useSelectedApp";
 import AppSelector from "@/components/layout/AppSelector";
 import { Badge } from "@/components/ui/badge";
+import { ADMIN_APPS, getAdminAppLabel } from "@/lib/admin-apps";
 import {
   Tooltip,
   TooltipContent,
@@ -28,10 +27,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Separator } from "@/components/ui/separator";
-
-interface AppsResponse {
-  apps: Array<{ id: string; app_name: string }>;
-}
 
 type NavItem = {
   href: string;
@@ -44,7 +39,6 @@ const navSections: Array<{ title: string; items: NavItem[] }> = [
     title: "Workspace",
     items: [
       { href: "/", label: "Dashboard", icon: LayoutDashboard },
-      { href: "/apps", label: "Apps", icon: AppWindow },
       { href: "/users", label: "Accounts", icon: Users },
       { href: "/support-messages", label: "Messages", icon: MessageSquare },
     ],
@@ -82,38 +76,23 @@ export default function Sidebar() {
   const pathname = usePathname();
   const { data: session } = useSession();
   const { selectedApp, setSelectedApp } = useSelectedApp();
-  const { data } = useFirestore<AppsResponse>("/api/admin/apps", 60000);
-
-  const apps = (data?.apps || []).map((app) => ({
-    id: app.id,
-    label: app.app_name,
-  }));
-  const name =
-    selectedApp === "all"
-      ? "All Products"
-      : (apps.find((app) => app.id === selectedApp)?.label ??
-        "Selected Product");
+  const name = getAdminAppLabel(selectedApp);
   const role = session?.user?.role || "admin";
 
-  const withApp = (href: string) => {
-    if (selectedApp === "all") {
-      return href;
-    }
-
-    return `${href}?app=${encodeURIComponent(selectedApp)}`;
-  };
+  const withApp = (href: string) =>
+    `${href}?app=${encodeURIComponent(selectedApp)}`;
 
   return (
     <>
       {/* Desktop sidebar */}
-      <aside className="hidden h-screen w-[290px] shrink-0 border-r bg-background md:sticky md:top-0 md:flex md:flex-col">
-        <div className="flex items-start gap-3 px-5 py-5">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-base font-bold text-primary">
+      <aside className="hidden h-screen w-[276px] shrink-0 border-r bg-background md:sticky md:top-0 md:flex md:flex-col">
+        <div className="flex items-start gap-3 px-5 py-4">
+          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-sm font-bold text-primary">
             W
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <span className="truncate text-base font-semibold tracking-tight">
+              <span className="truncate text-[15px] font-semibold tracking-tight">
                 War Room
               </span>
               <Badge variant="secondary" className="text-[10px] uppercase">
@@ -126,30 +105,30 @@ export default function Sidebar() {
           </div>
         </div>
         <Separator />
-        <div className="px-5 py-4">
+        <div className="px-5 py-3.5">
           <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
             Active Product
           </p>
           <AppSelector
             value={selectedApp}
             onChange={setSelectedApp}
-            apps={apps}
-            allLabel="All Products"
-            className="h-11 rounded-2xl border-0 bg-muted px-4 text-left shadow-none hover:bg-muted"
+            apps={ADMIN_APPS}
+            includeAllOption={false}
+            className="h-10 rounded-2xl border border-border/60 bg-muted/50 px-4 text-left shadow-none hover:bg-muted"
             contentClassName="w-[240px]"
           />
         </div>
         <Separator />
-        <nav className="flex-1 overflow-y-auto px-3 py-4">
+        <nav className="flex-1 overflow-y-auto px-3 py-3">
           <TooltipProvider delayDuration={0}>
-            <div className="space-y-4">
+            <div className="space-y-3">
               {navSections.map((section, sectionIndex) => (
                 <div key={section.title}>
-                  {sectionIndex > 0 && <Separator className="mb-4" />}
-                  <p className="mb-2 px-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+                  {sectionIndex > 0 && <Separator className="mb-3" />}
+                  <p className="mb-1.5 px-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
                     {section.title}
                   </p>
-                  <div className="space-y-1">
+                  <div className="space-y-0.5">
                     {section.items.map((item) => {
                       const active =
                         item.href === "/"
@@ -164,7 +143,7 @@ export default function Sidebar() {
                             <Link
                               href={withApp(item.href)}
                               className={cn(
-                                "flex items-center gap-3 rounded-r-xl border-l-[3px] px-3 py-2.5 text-sm transition-colors",
+                                "flex items-center gap-3 rounded-r-xl border-l-[3px] px-3 py-2 text-sm transition-colors",
                                 active
                                   ? "border-primary bg-primary/10 font-medium text-primary"
                                   : "border-transparent text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -190,7 +169,7 @@ export default function Sidebar() {
           <button
             type="button"
             onClick={() => signOut({ callbackUrl: "/login" })}
-            className="flex w-full items-center gap-3 rounded-r-xl border-l-[3px] border-transparent px-3 py-2.5 text-sm text-destructive transition-colors hover:bg-destructive/10"
+            className="flex w-full items-center gap-3 rounded-r-xl border-l-[3px] border-transparent px-3 py-2 text-sm text-destructive transition-colors hover:bg-destructive/10"
           >
             <LogOut className="h-4.5 w-4.5 shrink-0" />
             <span>Logout</span>

@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useFirestore } from "@/hooks/useFirestore";
 import { useSelectedApp } from "@/hooks/useSelectedApp";
+import { getAdminAppHref, getAdminAppLabel } from "@/lib/admin-apps";
 import type { DashboardSummary, TopUserByCost } from "@/lib/firestore";
 
 interface DashboardResponse {
@@ -69,7 +70,8 @@ function DashboardSkeleton() {
 
 export default function DashboardClient() {
   const { selectedApp } = useSelectedApp();
-  const appParam = selectedApp !== "all" ? `?app=${selectedApp}` : "";
+  const appParam = `?app=${selectedApp}`;
+  const selectedAppLabel = getAdminAppLabel(selectedApp);
   const { data, isLoading, error } = useFirestore<DashboardResponse>(
     `/api/admin/dashboard${appParam}`,
     60000
@@ -119,7 +121,7 @@ export default function DashboardClient() {
         <div>
           <h1 className="text-xl font-bold md:text-2xl">Dashboard</h1>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Live overview of all your apps
+            Live overview of {selectedAppLabel}
           </p>
         </div>
         <div className="flex items-center gap-1.5">
@@ -210,7 +212,10 @@ export default function DashboardClient() {
             Check Firestore support conversations, review pending customer
             issues, and reply directly as owner from one place.
           </p>
-          <Link href="/support-messages" className="inline-flex">
+          <Link
+            href={getAdminAppHref("/support-messages", selectedApp)}
+            className="inline-flex"
+          >
             <Button size="sm" className="gap-1.5 text-xs">
               <MessageSquare className="h-3.5 w-3.5" />
               Open Support Messages

@@ -20,6 +20,8 @@ import type {
   SubscriptionInfo,
   AiUsageRecord,
 } from "@/lib/firestore";
+import { useSelectedApp } from "@/hooks/useSelectedApp";
+import { getAdminAppHref } from "@/lib/admin-apps";
 import UserMessages from "@/components/users/UserMessages";
 import Link from "next/link";
 import { ArrowLeft, Ban, ShieldCheck } from "lucide-react";
@@ -46,6 +48,7 @@ interface DetailResponse {
 }
 
 export default function UserDetail({ uid }: UserDetailProps) {
+  const { selectedApp } = useSelectedApp();
   const { data, isLoading, error, mutate } = useFirestore<DetailResponse>(
     `/api/admin/users/${uid}`
   );
@@ -108,7 +111,7 @@ export default function UserDetail({ uid }: UserDetailProps) {
   return (
     <section className="space-y-5">
       <Link
-        href="/users"
+        href={getAdminAppHref("/users", selectedApp)}
         className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
       >
         <ArrowLeft className="h-3 w-3" />
