@@ -31,7 +31,7 @@ export default function AppsPage() {
   const allowedAppIds = new Set(ADMIN_APPS.map((app) => app.id));
   const apps =
     data?.apps?.filter(
-      (app) => isAdminAppId(app.app_id) && allowedAppIds.has(app.app_id)
+      (app) => isAdminAppId(app.id) && allowedAppIds.has(app.id)
     ) ?? [];
 
   return (
@@ -64,7 +64,7 @@ export default function AppsPage() {
                 <div className="flex items-start justify-between">
                   <div>
                     <CardTitle className="text-base">
-                      {getAdminAppLabel(app.app_id)}
+                      {getAdminAppLabel(app.id)}
                     </CardTitle>
                     <p className="mt-0.5 text-xs text-muted-foreground">
                       {app.platform} · {app.app_id}

@@ -7,6 +7,16 @@ export const ADMIN_APPS: Array<{ id: AdminAppId; label: string }> = [
 
 export const DEFAULT_ADMIN_APP_ID: AdminAppId = "descroll";
 
+const ADMIN_APP_ALIASES: Record<string, AdminAppId> = {
+  descroll: "descroll",
+  descrollapp: "descroll",
+  deScroll: "descroll",
+  descrolldescroll: "descroll",
+  comsudoajaydescroll: "descroll",
+  soullens: "soullens",
+  comsudoajaysoullens: "soullens",
+};
+
 export function isAdminAppId(
   value: string | null | undefined
 ): value is AdminAppId {
@@ -16,11 +26,22 @@ export function isAdminAppId(
 export function normalizeAdminAppId(
   value: string | null | undefined
 ): AdminAppId {
-  return isAdminAppId(value) ? value : DEFAULT_ADMIN_APP_ID;
+  if (isAdminAppId(value)) {
+    return value;
+  }
+
+  const normalizedKey = (value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+  return ADMIN_APP_ALIASES[normalizedKey] ?? DEFAULT_ADMIN_APP_ID;
 }
 
 export function getAdminAppLabel(appId: string): string {
-  return ADMIN_APPS.find((app) => app.id === appId)?.label ?? "deScroll";
+  const normalizedAppId = normalizeAdminAppId(appId);
+  return (
+    ADMIN_APPS.find((app) => app.id === normalizedAppId)?.label ?? "deScroll"
+  );
 }
 
 export function getAdminAppSearchParam(appId: string): string {
