@@ -8,8 +8,10 @@ import {
   MessageSquare,
   DollarSign,
   TrendingUp,
-  Target,
-  Zap,
+  BarChart3,
+  ShieldAlert,
+  ArrowRight,
+  Activity,
 } from "lucide-react";
 import MessagesChart from "@/components/dashboard/MessagesChart";
 import RevenueChart from "@/components/dashboard/RevenueChart";
@@ -25,6 +27,32 @@ import type { DashboardSummary, TopUserByCost } from "@/lib/firestore";
 interface DashboardResponse {
   summary: DashboardSummary;
   topUsers: TopUserByCost[];
+}
+
+interface SupportStatsResponse {
+  stats: {
+    total: number;
+    open: number;
+    waitingCustomer: number;
+    waitingSupport: number;
+    resolved: number;
+    closed: number;
+  };
+}
+
+interface IntegrationMetric {
+  label: string;
+  note: string;
+  value: string | null;
+}
+
+interface IntegrationOverviewResponse {
+  appId: string;
+  configured: boolean;
+  source: string;
+  message: string;
+  summary: IntegrationMetric[];
+  highlights: string[];
 }
 
 function inr(value: number) {
@@ -71,9 +99,22 @@ function DashboardSkeleton() {
 export default function DashboardClient() {
   const { selectedApp } = useSelectedApp();
   const appParam = `?app=${selectedApp}`;
+  const supportStatsParam = `?stats=true&app=${selectedApp}`;
   const selectedAppLabel = getAdminAppLabel(selectedApp);
   const { data, isLoading, error } = useFirestore<DashboardResponse>(
     `/api/admin/dashboard${appParam}`,
+    60000
+  );
+  const { data: supportStatsData } = useFirestore<SupportStatsResponse>(
+    `/api/admin/support-tickets${supportStatsParam}`,
+    60000
+  );
+  const { data: analyticsData } = useFirestore<IntegrationOverviewResponse>(
+    `/api/admin/analytics${appParam}`,
+    60000
+  );
+  const { data: crashlyticsData } = useFirestore<IntegrationOverviewResponse>(
+    `/api/admin/crashlytics${appParam}`,
     60000
   );
   const [secondsAgo, setSecondsAgo] = useState(0);
@@ -114,6 +155,9 @@ export default function DashboardClient() {
   }
 
   const s = data.summary;
+  const openSupportCount = supportStatsData?.stats.open ?? 0;
+  const waitingSupportCount = supportStatsData?.stats.waitingSupport ?? 0;
+  const supportTrend = `${waitingSupportCount} waiting on owner`;
 
   return (
     <section className="space-y-6">
@@ -135,7 +179,7 @@ export default function DashboardClient() {
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
-          label="Total Users"
+          label="Active Users"
           value={s.totalUsers.toLocaleString()}
           icon={Users}
           iconColor="text-blue-600"
@@ -153,35 +197,154 @@ export default function DashboardClient() {
           iconColor="text-violet-600"
         />
         <StatCard
+          label="Revenue This Month"
+          value={inr(s.revenueMonthInr)}
+          icon={TrendingUp}
+          iconColor="text-emerald-600"
+        />
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <StatCard
+          label="Open Support"
+          value={openSupportCount.toLocaleString()}
+          trend={supportTrend}
+          icon={MessageSquare}
+          iconColor="text-rose-600"
+        />
+        <StatCard
           label="AI Cost Today"
           value={usd(s.aiCostUsd)}
           trend={inr(s.aiCostInr)}
           icon={DollarSign}
           iconColor="text-amber-600"
         />
+        <StatCard
+          label="Attention Needed"
+          value={waitingSupportCount.toLocaleString()}
+          trend="Support tickets waiting on team"
+          icon={Activity}
+          iconColor="text-violet-600"
+        />
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <StatCard
-          label="Revenue This Month"
-          value={inr(s.revenueMonthInr)}
-          icon={TrendingUp}
-          iconColor="text-green-600"
-        />
-        <StatCard
-          label="Profit"
-          value={inr(s.profitInr)}
-          icon={Target}
-          iconColor="text-cyan-600"
-        />
-        <StatCard
-          label="Cost/Message"
-          value={
-            s.messagesToday > 0 ? usd(s.aiCostUsd / s.messagesToday) : "$0.00"
-          }
-          icon={Zap}
-          iconColor="text-orange-600"
-        />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card className="border-[#C9D7FF] bg-gradient-to-br from-[#EEF4FF] via-white to-[#F7F9FF]">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <CardTitle className="text-sm font-semibold text-slate-900">
+                  Product Analytics
+                </CardTitle>
+                <p className="mt-1 text-xs text-slate-600">
+                  User growth, engagement, versions, events, and retention.
+                </p>
+              </div>
+              <div className="rounded-2xl bg-sky-100 p-2 text-sky-700">
+                <BarChart3 className="h-4 w-4" />
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              {(analyticsData?.summary ?? []).slice(0, 4).map((metric) => (
+                <div
+                  key={metric.label}
+                  className="rounded-2xl border bg-white/80 p-3"
+                >
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                    {metric.label}
+                  </p>
+                  <p className="mt-2 text-lg font-semibold text-slate-900">
+                    {metric.value ?? "Pending"}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-600">{metric.note}</p>
+                </div>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {(analyticsData?.highlights ?? []).slice(0, 4).map((item) => (
+                <span
+                  key={item}
+                  className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-[11px] text-sky-800"
+                >
+                  {item}
+                </span>
+              ))}
+            </div>
+            <div className="flex items-center justify-between gap-3 rounded-2xl border border-dashed border-sky-200 bg-white/80 p-3">
+              <p className="text-xs text-slate-600">
+                {analyticsData?.message ??
+                  "Connect the GA4 Analytics Data API to populate live metrics in this section."}
+              </p>
+              <Link href={getAdminAppHref("/analytics", selectedApp)}>
+                <Button size="sm" variant="outline" className="gap-1.5 text-xs">
+                  Open Analytics
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Button>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-[#FFD9C7] bg-gradient-to-br from-[#FFF4EE] via-white to-[#FFF9F5]">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <CardTitle className="text-sm font-semibold text-slate-900">
+                  Crashlytics
+                </CardTitle>
+                <p className="mt-1 text-xs text-slate-600">
+                  Stability signals, crash-free users, issue spikes, and version
+                  health.
+                </p>
+              </div>
+              <div className="rounded-2xl bg-orange-100 p-2 text-orange-700">
+                <ShieldAlert className="h-4 w-4" />
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              {(crashlyticsData?.summary ?? []).slice(0, 4).map((metric) => (
+                <div
+                  key={metric.label}
+                  className="rounded-2xl border bg-white/80 p-3"
+                >
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+                    {metric.label}
+                  </p>
+                  <p className="mt-2 text-lg font-semibold text-slate-900">
+                    {metric.value ?? "Pending"}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-600">{metric.note}</p>
+                </div>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {(crashlyticsData?.highlights ?? []).slice(0, 4).map((item) => (
+                <span
+                  key={item}
+                  className="rounded-full border border-orange-200 bg-orange-50 px-2.5 py-1 text-[11px] text-orange-800"
+                >
+                  {item}
+                </span>
+              ))}
+            </div>
+            <div className="flex items-center justify-between gap-3 rounded-2xl border border-dashed border-orange-200 bg-white/80 p-3">
+              <p className="text-xs text-slate-600">
+                {crashlyticsData?.message ??
+                  "Connect Crashlytics issue summaries to surface real-time stability status here."}
+              </p>
+              <Link href={getAdminAppHref("/crashlytics", selectedApp)}>
+                <Button size="sm" variant="outline" className="gap-1.5 text-xs">
+                  Open Crashlytics
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Button>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">

@@ -33,6 +33,26 @@ export interface SubscriptionDoc {
   raw_google_response: Record<string, unknown>;
 }
 
+export type SubscriptionEventType =
+  | "purchase_started"
+  | "purchase_pending"
+  | "purchase_cancelled"
+  | "purchase_failed"
+  | "verify_success"
+  | "verify_failed"
+  | "status_check"
+  | "plan_transition"
+  | "restore"
+  | "renewed"
+  | "expired"
+  | "cancelled"
+  | "refunded"
+  | "revoked"
+  | "webhook_received"
+  | "reconciliation_mismatch";
+
+export type SubscriptionEventSource = "android_client" | "backend_verify" | "google_play";
+
 export interface AiUsageDoc {
   user_id: string;
   app_id: string;
@@ -124,6 +144,30 @@ export interface SubscriptionVerifyBody {
   purchaseToken: string;
   productId: string;
   packageName: string;
+  basePlanId?: string;
+  purchaseState?: number;
+  orderId?: string;
+  purchaseTimeMillis?: number;
+  isAcknowledged?: boolean;
+  billingResponseCode?: number;
+  billingDebugMessage?: string;
+}
+
+export interface SubscriptionEventBody {
+  eventType: SubscriptionEventType;
+  eventSource?: SubscriptionEventSource;
+  planType?: PlanType;
+  productId?: string;
+  basePlanId?: string;
+  purchaseToken?: string;
+  purchaseState?: number;
+  orderId?: string;
+  billingResponseCode?: number;
+  billingDebugMessage?: string;
+  oldStatus?: string;
+  newStatus?: string;
+  occurredAt?: string;
+  metadata?: Record<string, unknown>;
 }
 
 // ── Chat event (per-request analytics, 30-day TTL) ──
@@ -153,11 +197,19 @@ export interface ChatEventDoc {
 export interface SubscriptionEventDoc {
   user_id: string;
   app_id: string;
-  event_type: "verify_success" | "verify_failed" | "status_check" | "plan_transition";
-  plan_type: string;
+  event_type: SubscriptionEventType;
+  event_source: SubscriptionEventSource;
+  plan_type?: string;
   product_id?: string;
+  base_plan_id?: string;
+  purchase_token?: string;
+  purchase_state?: number;
+  order_id?: string;
+  billing_response_code?: number;
+  billing_debug_message?: string;
   old_status?: string;
   new_status?: string;
   metadata?: Record<string, unknown>;
+  occurred_at?: FirebaseFirestore.Timestamp;
   created_at: FirebaseFirestore.Timestamp;
 }

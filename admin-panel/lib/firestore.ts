@@ -39,6 +39,27 @@ export interface SubscriptionInfo {
   verified_at?: { _seconds: number };
 }
 
+export interface SubscriptionEventInfo {
+  id: string;
+  user_id: string;
+  app_id: string;
+  event_type: string;
+  event_source?: string;
+  plan_type?: string;
+  product_id?: string;
+  base_plan_id?: string;
+  purchase_token?: string;
+  purchase_state?: number;
+  order_id?: string;
+  billing_response_code?: number;
+  billing_debug_message?: string;
+  old_status?: string;
+  new_status?: string;
+  metadata?: Record<string, unknown>;
+  occurred_at?: { _seconds: number };
+  created_at?: { _seconds: number };
+}
+
 export interface AiUsageRecord {
   id: string;
   user_id: string;
@@ -400,6 +421,55 @@ export async function getSubscriptionStats(appId?: string) {
     active: activeSnap.data().count,
     total: totalSnap.data().count,
     planDistribution: planCounts,
+  };
+}
+
+export async function getSubscriptionEvents(
+  appId?: string,
+  eventType?: string,
+  limit = 100
+): Promise<SubscriptionEventInfo[]> {
+  let query: FirebaseFirestore.Query = applyAppIdFilter(
+    adminDb.collection("subscription_events"),
+    appId
+  );
+
+  if (eventType) {
+    query = query.where("event_type", "==", eventType);
+  }
+
+  const snap = await query.get();
+
+  return snap.docs
+    .map((doc) => ({
+      id: doc.id,
+      ...(doc.data() as Omit<SubscriptionEventInfo, "id">),
+    }))
+    .sort((a, b) => {
+      const aTime = a.occurred_at?._seconds ?? a.created_at?._seconds ?? 0;
+      const bTime = b.occurred_at?._seconds ?? b.created_at?._seconds ?? 0;
+      return bTime - aTime;
+    })
+    .slice(0, limit);
+}
+
+export async function getSubscriptionEventStats(appId?: string) {
+  const events = await getSubscriptionEvents(appId, undefined, 500);
+
+  return {
+    total: events.length,
+    failures: events.filter((event) =>
+      [
+        "purchase_failed",
+        "verify_failed",
+        "reconciliation_mismatch",
+        "refunded",
+        "revoked",
+      ].includes(event.event_type)
+    ).length,
+    pending: events.filter((event) => event.event_type === "purchase_pending")
+      .length,
+    renewals: events.filter((event) => event.event_type === "renewed").length,
   };
 }
 

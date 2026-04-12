@@ -14,6 +14,9 @@ import {
   MessageSquare,
   LifeBuoy,
   LogOut,
+  BarChart3,
+  ShieldAlert,
+  History,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSelectedApp } from "@/hooks/useSelectedApp";
@@ -46,6 +49,8 @@ const navSections: Array<{ title: string; items: NavItem[] }> = [
   {
     title: "Insights",
     items: [
+      { href: "/analytics", label: "Analytics", icon: BarChart3 },
+      { href: "/crashlytics", label: "Crashlytics", icon: ShieldAlert },
       { href: "/ai-usage", label: "AI Usage", icon: Bot },
       { href: "/cloud-usage", label: "Cloud Budget", icon: Cloud },
       { href: "/alerts", label: "Alerts", icon: Bell },
@@ -55,6 +60,11 @@ const navSections: Array<{ title: string; items: NavItem[] }> = [
     title: "Operations",
     items: [
       { href: "/subscriptions", label: "Subscriptions", icon: CreditCard },
+      {
+        href: "/subscription-events",
+        label: "Subscription Events",
+        icon: History,
+      },
       { href: "/support-tickets", label: "Support Tickets", icon: LifeBuoy },
     ],
   },
@@ -68,7 +78,7 @@ const mobileItems: NavItem[] = [
   { href: "/", label: "Home", icon: LayoutDashboard },
   { href: "/users", label: "Accounts", icon: Users },
   { href: "/support-messages", label: "Messages", icon: MessageSquare },
-  { href: "/alerts", label: "Alerts", icon: Bell },
+  { href: "/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 

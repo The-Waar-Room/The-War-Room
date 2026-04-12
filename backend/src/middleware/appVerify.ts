@@ -7,7 +7,10 @@ const DESCROLL_APP_ID = "deScroll";
 const SOULLENS_APP_ID = "soullens";
 
 function normalizeAppKey(value: string): string {
-  return value.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
 }
 
 function canonicalizeAppId(appId: string): string {
@@ -60,10 +63,7 @@ export async function appVerify(
         .filter((value): value is string => typeof value === "string" && value.length > 0)
         .map((value) => normalizeAppKey(value));
 
-      return (
-        candidateKeys.includes(normalizedInput) ||
-        candidateKeys.includes(normalizedCanonical)
-      );
+      return candidateKeys.includes(normalizedInput) || candidateKeys.includes(normalizedCanonical);
     });
 
     if (!matchedApp?.exists) {
