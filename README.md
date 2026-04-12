@@ -106,6 +106,15 @@ Then fill required values in `.env.local`:
 - `FIREBASE_PRIVATE_KEY`
 - `BACKEND_BASE_URL`
 
+Optional analytics and Crashlytics env vars for the admin panel:
+
+- `GA4_PROPERTY_ID_DESCROLL`
+- `GA4_PROPERTY_ID_SOULLENS`
+- `CRASHLYTICS_BIGQUERY_PROJECT_ID`
+- `CRASHLYTICS_BIGQUERY_QUERY_PROJECT_ID`
+- `CRASHLYTICS_BIGQUERY_DATASET`
+- `CRASHLYTICS_SESSIONS_BIGQUERY_DATASET`
+
 ## Deployment
 
 ### Backend

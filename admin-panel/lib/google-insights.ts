@@ -14,6 +14,25 @@ export interface InsightOverviewResponse {
   message: string;
   summary: IntegrationMetric[];
   highlights: string[];
+  health: IntegrationHealth;
+}
+
+export interface IntegrationHealthCheck {
+  label: string;
+  status: "ok" | "warning" | "error";
+  detail: string;
+}
+
+export interface IntegrationHealthValue {
+  label: string;
+  value: string | null;
+}
+
+export interface IntegrationHealth {
+  state: "ok" | "action-required";
+  summary: string;
+  checks: IntegrationHealthCheck[];
+  detectedValues: IntegrationHealthValue[];
 }
 
 type AppConfig = {
@@ -25,6 +44,25 @@ type AppConfig = {
 type AnalyticsBatchResponse = {
   reports?: AnalyticsReport[];
   error?: { message?: string };
+};
+
+type AnalyticsAdminAccountSummariesResponse = {
+  accountSummaries?: Array<{
+    propertySummaries?: Array<{
+      property?: string;
+    }>;
+  }>;
+  nextPageToken?: string;
+};
+
+type AnalyticsAdminDataStreamsResponse = {
+  dataStreams?: Array<{
+    type?: string;
+    androidAppStreamData?: {
+      packageName?: string;
+    };
+  }>;
+  nextPageToken?: string;
 };
 
 type AnalyticsReport = {
@@ -68,16 +106,30 @@ const APP_CONFIG: Record<AdminAppId, AppConfig> = {
   },
 };
 
-const BIGQUERY_PROJECT_ID =
+const BIGQUERY_DATA_PROJECT_ID =
   process.env.CRASHLYTICS_BIGQUERY_PROJECT_ID ??
   process.env.FIREBASE_PROJECT_ID ??
   process.env.GOOGLE_CLOUD_PROJECT;
+
+const BIGQUERY_QUERY_PROJECT_ID =
+  process.env.CRASHLYTICS_BIGQUERY_QUERY_PROJECT_ID ??
+  process.env.BIGQUERY_QUERY_PROJECT_ID ??
+  process.env.GCP_PROJECT_ID ??
+  BIGQUERY_DATA_PROJECT_ID;
 
 const CRASHLYTICS_DATASET =
   process.env.CRASHLYTICS_BIGQUERY_DATASET ?? "firebase_crashlytics";
 
 const SESSIONS_DATASET =
   process.env.CRASHLYTICS_SESSIONS_BIGQUERY_DATASET ?? "firebase_sessions";
+
+const discoveredAnalyticsProperties = new Map<AdminAppId, string | null>();
+
+type AnalyticsPropertyResolution = {
+  propertyId: string | null;
+  source: "env" | "auto" | "missing";
+  errorMessage?: string;
+};
 
 function getGoogleAuth(scopes: string[]) {
   const { projectId, clientEmail, privateKey } = GOOGLE_CREDENTIALS;
@@ -134,12 +186,159 @@ async function googleJsonFetch<T>(
   return (await response.json()) as T;
 }
 
+function buildHealth(
+  state: IntegrationHealth["state"],
+  summary: string,
+  checks: IntegrationHealthCheck[],
+  detectedValues: IntegrationHealthValue[]
+): IntegrationHealth {
+  return {
+    state,
+    summary,
+    checks,
+    detectedValues,
+  };
+}
+
+function parseGoogleApiError(error: unknown) {
+  const rawMessage = error instanceof Error ? error.message : String(error);
+
+  try {
+    const parsed = JSON.parse(rawMessage) as {
+      error?: { code?: number; message?: string; status?: string };
+    };
+
+    return {
+      message: parsed.error?.message ?? rawMessage,
+      status: parsed.error?.status ?? null,
+      code: parsed.error?.code ?? null,
+    };
+  } catch {
+    return {
+      message: rawMessage,
+      status: null,
+      code: null,
+    };
+  }
+}
+
+function buildBigQueryAccessMessage(appLabel: string, reason: string) {
+  if (
+    reason.includes("bigquery.jobs.create") ||
+    reason.includes("Access Denied")
+  ) {
+    const queryProject = BIGQUERY_QUERY_PROJECT_ID ?? "your query project";
+    const dataProject = BIGQUERY_DATA_PROJECT_ID ?? "your Firebase project";
+
+    return `Unable to load Crashlytics export data for ${appLabel}. Grant BigQuery Job User on ${queryProject} to the admin-panel service account, or set CRASHLYTICS_BIGQUERY_QUERY_PROJECT_ID to a project where it can create query jobs. It also needs dataset read access on ${dataProject}.`;
+  }
+
+  return `Unable to load Crashlytics export data for ${appLabel}. Enable BigQuery export for Crashlytics and Firebase Sessions, then verify dataset access. ${reason}`;
+}
+
+async function discoverAnalyticsPropertyId(appId: AdminAppId) {
+  if (discoveredAnalyticsProperties.has(appId)) {
+    return discoveredAnalyticsProperties.get(appId) ?? null;
+  }
+
+  const appConfig = APP_CONFIG[appId];
+  let pageToken: string | undefined;
+
+  try {
+    do {
+      const params = new URLSearchParams({ pageSize: "200" });
+      if (pageToken) {
+        params.set("pageToken", pageToken);
+      }
+
+      const summaries =
+        await googleJsonFetch<AnalyticsAdminAccountSummariesResponse>(
+          `https://analyticsadmin.googleapis.com/v1beta/accountSummaries?${params.toString()}`,
+          { method: "GET" },
+          ["https://www.googleapis.com/auth/analytics.readonly"]
+        );
+
+      for (const accountSummary of summaries.accountSummaries ?? []) {
+        for (const propertySummary of accountSummary.propertySummaries ?? []) {
+          const property = propertySummary.property;
+          if (!property) {
+            continue;
+          }
+
+          const streams =
+            await googleJsonFetch<AnalyticsAdminDataStreamsResponse>(
+              `https://analyticsadmin.googleapis.com/v1beta/${property}/dataStreams?pageSize=200`,
+              { method: "GET" },
+              ["https://www.googleapis.com/auth/analytics.readonly"]
+            );
+
+          const hasMatchingAndroidStream = (streams.dataStreams ?? []).some(
+            (stream) =>
+              stream.type === "ANDROID_APP_STREAM" &&
+              stream.androidAppStreamData?.packageName === appConfig.packageName
+          );
+
+          if (hasMatchingAndroidStream) {
+            const propertyId = property.split("/")[1] ?? null;
+            discoveredAnalyticsProperties.set(appId, propertyId);
+            return propertyId;
+          }
+        }
+      }
+
+      pageToken = summaries.nextPageToken;
+    } while (pageToken);
+  } catch (error) {
+    discoveredAnalyticsProperties.set(appId, null);
+    const { message } = parseGoogleApiError(error);
+    return { propertyId: null, errorMessage: message };
+  }
+
+  discoveredAnalyticsProperties.set(appId, null);
+  return { propertyId: null };
+}
+
+async function resolveAnalyticsPropertyId(
+  appId: AdminAppId
+): Promise<AnalyticsPropertyResolution> {
+  const configuredPropertyId = APP_CONFIG[appId].analyticsPropertyId;
+
+  if (configuredPropertyId) {
+    return {
+      propertyId: configuredPropertyId,
+      source: "env",
+    };
+  }
+
+  const discovered = await discoverAnalyticsPropertyId(appId);
+  if (typeof discovered === "string") {
+    return {
+      propertyId: discovered,
+      source: "auto",
+    };
+  }
+
+  if (discovered?.propertyId) {
+    return {
+      propertyId: discovered.propertyId,
+      source: "auto",
+    };
+  }
+
+  return {
+    propertyId: null,
+    source: "missing",
+    errorMessage: discovered?.errorMessage,
+  };
+}
+
 function buildEmptyOverview(
   appId: AdminAppId,
   source: string,
   message: string,
   summary: IntegrationMetric[],
-  highlights: string[]
+  highlights: string[],
+  health: IntegrationHealth
 ): InsightOverviewResponse {
   return {
     appId,
@@ -148,6 +347,7 @@ function buildEmptyOverview(
     message,
     summary,
     highlights,
+    health,
   };
 }
 
@@ -300,18 +500,58 @@ export async function getAnalyticsOverview(
     "App versions",
   ];
 
-  if (!appConfig.analyticsPropertyId) {
+  const propertyResolution = await resolveAnalyticsPropertyId(appId);
+  const analyticsPropertyId = propertyResolution.propertyId;
+
+  const analyticsDetectedValues: IntegrationHealthValue[] = [
+    { label: "Firebase project", value: GOOGLE_CREDENTIALS.projectId ?? null },
+    { label: "Android package", value: appConfig.packageName },
+    {
+      label: "Configured GA4 property",
+      value: appConfig.analyticsPropertyId ?? null,
+    },
+    {
+      label: "Resolved GA4 property",
+      value: analyticsPropertyId,
+    },
+  ];
+
+  if (!analyticsPropertyId) {
+    const analyticsHealth = buildHealth(
+      "action-required",
+      propertyResolution.errorMessage
+        ? "Analytics property lookup failed before a usable GA4 property could be resolved."
+        : "Analytics is waiting on a GA4 property ID or Analytics Admin API discovery access.",
+      [
+        {
+          label: "GA4 property ID",
+          status: "error",
+          detail:
+            "Set GA4_PROPERTY_ID_DESCROLL or GA4_PROPERTY_ID_SOULLENS, or allow the admin-panel credentials to read Analytics Admin account summaries and data streams.",
+        },
+        {
+          label: "Analytics Admin API access",
+          status: propertyResolution.errorMessage ? "error" : "warning",
+          detail:
+            propertyResolution.errorMessage ??
+            "Auto-discovery was attempted but no linked Android app stream property was found yet.",
+        },
+      ],
+      analyticsDetectedValues
+    );
+
     return buildEmptyOverview(
       appId,
       "Firebase Analytics / GA4",
-      `Set GA4_PROPERTY_ID_${appId === "deScroll" ? "DESCROLL" : "SOULLENS"} in the admin panel environment to load ${appConfig.label} analytics data.`,
+      `Unable to find a linked GA4 property for ${appConfig.label}. Set GA4_PROPERTY_ID_${appId === "deScroll" ? "DESCROLL" : "SOULLENS"}, or grant Analytics Admin API access so the property can be auto-discovered from the Android app stream.`,
       defaultAnalyticsSummary(),
-      defaultHighlights
+      defaultHighlights,
+      analyticsHealth
     );
   }
 
   try {
-    const property = `properties/${appConfig.analyticsPropertyId}`;
+    const property = `properties/${analyticsPropertyId}`;
     const batchResponse = await googleJsonFetch<AnalyticsBatchResponse>(
       `https://analyticsdata.googleapis.com/v1beta/${property}:batchRunReports`,
       {
@@ -427,17 +667,57 @@ export async function getAnalyticsOverview(
           : "Active users by device model",
         `Realtime users: ${formatWholeNumber(realtimeUsers)}`,
       ],
+      health: buildHealth(
+        "ok",
+        propertyResolution.source === "env"
+          ? "Analytics is using the configured GA4 property ID."
+          : "Analytics is using an auto-discovered GA4 property from the Android app stream.",
+        [
+          {
+            label: "GA4 property resolution",
+            status: "ok",
+            detail:
+              propertyResolution.source === "env"
+                ? "Resolved from environment variable."
+                : "Resolved automatically from the Analytics Admin API.",
+          },
+          {
+            label: "Analytics Data API access",
+            status: "ok",
+            detail: "The admin-panel credentials can read GA4 reporting data.",
+          },
+        ],
+        analyticsDetectedValues
+      ),
     };
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Unknown analytics error";
+    const { message } = parseGoogleApiError(error);
+
+    const analyticsHealth = buildHealth(
+      "action-required",
+      "Analytics credentials reached GA4 property resolution, but reporting access is still blocked.",
+      [
+        {
+          label: "GA4 property resolution",
+          status: "ok",
+          detail: `Resolved property ${analyticsPropertyId}.`,
+        },
+        {
+          label: "Analytics Data API access",
+          status: "error",
+          detail: message,
+        },
+      ],
+      analyticsDetectedValues
+    );
 
     return buildEmptyOverview(
       appId,
       "Firebase Analytics / GA4",
       `Unable to load GA4 metrics for ${appConfig.label}. Check Analytics Data API access, property permissions, and env vars. ${message}`,
       defaultAnalyticsSummary(),
-      defaultHighlights
+      defaultHighlights,
+      analyticsHealth
     );
   }
 }
@@ -455,18 +735,44 @@ export async function getCrashlyticsOverview(
     "New and regressed issues",
   ];
 
-  if (!BIGQUERY_PROJECT_ID) {
+  const crashlyticsDetectedValues: IntegrationHealthValue[] = [
+    { label: "Firebase project", value: BIGQUERY_DATA_PROJECT_ID ?? null },
+    { label: "Query project", value: BIGQUERY_QUERY_PROJECT_ID ?? null },
+    { label: "Crashlytics dataset", value: CRASHLYTICS_DATASET },
+    { label: "Sessions dataset", value: SESSIONS_DATASET },
+    { label: "Android package", value: appConfig.packageName },
+  ];
+
+  if (!BIGQUERY_DATA_PROJECT_ID) {
+    const crashlyticsHealth = buildHealth(
+      "action-required",
+      "Crashlytics export queries are blocked because the Firebase project is not configured for the admin panel.",
+      [
+        {
+          label: "Firebase project env",
+          status: "error",
+          detail:
+            "Set CRASHLYTICS_BIGQUERY_PROJECT_ID or FIREBASE_PROJECT_ID so the export tables can be located.",
+        },
+      ],
+      crashlyticsDetectedValues
+    );
+
     return buildEmptyOverview(
       appId,
       "Firebase Crashlytics via BigQuery",
       `Set CRASHLYTICS_BIGQUERY_PROJECT_ID or FIREBASE_PROJECT_ID in the admin panel environment to query Crashlytics exports for ${appConfig.label}.`,
       defaultCrashlyticsSummary(),
-      defaultHighlights
+      defaultHighlights,
+      crashlyticsHealth
     );
   }
 
-  const crashTable = `\`${BIGQUERY_PROJECT_ID}.${CRASHLYTICS_DATASET}.${sanitizeBigQueryIdentifier(appConfig.packageName)}_ANDROID\``;
-  const sessionsTable = `\`${BIGQUERY_PROJECT_ID}.${SESSIONS_DATASET}.${sanitizeBigQueryIdentifier(appConfig.packageName)}_ANDROID\``;
+  const bigQueryQueryProjectId =
+    BIGQUERY_QUERY_PROJECT_ID ?? BIGQUERY_DATA_PROJECT_ID;
+
+  const crashTable = `\`${BIGQUERY_DATA_PROJECT_ID}.${CRASHLYTICS_DATASET}.${sanitizeBigQueryIdentifier(appConfig.packageName)}_ANDROID\``;
+  const sessionsTable = `\`${BIGQUERY_DATA_PROJECT_ID}.${SESSIONS_DATASET}.${sanitizeBigQueryIdentifier(appConfig.packageName)}_ANDROID\``;
 
   try {
     const [
@@ -477,7 +783,7 @@ export async function getCrashlyticsOverview(
       cfuRows,
     ] = await Promise.all([
       queryBigQuery(
-        BIGQUERY_PROJECT_ID,
+        bigQueryQueryProjectId,
         `
             SELECT
               COUNT(DISTINCT IF(error_type = 'FATAL', event_id, NULL)) AS fatal_crashes,
@@ -487,7 +793,7 @@ export async function getCrashlyticsOverview(
           `
       ),
       queryBigQuery(
-        BIGQUERY_PROJECT_ID,
+        bigQueryQueryProjectId,
         `
             SELECT application.display_version AS version, COUNT(DISTINCT event_id) AS crash_events
             FROM ${crashTable}
@@ -498,7 +804,7 @@ export async function getCrashlyticsOverview(
           `
       ),
       queryBigQuery(
-        BIGQUERY_PROJECT_ID,
+        bigQueryQueryProjectId,
         `
             SELECT device.model AS device_model, COUNT(DISTINCT event_id) AS crash_events
             FROM ${crashTable}
@@ -509,7 +815,7 @@ export async function getCrashlyticsOverview(
           `
       ),
       queryBigQuery(
-        BIGQUERY_PROJECT_ID,
+        bigQueryQueryProjectId,
         `
             SELECT issue_id, COUNT(DISTINCT event_id) AS crash_events
             FROM ${crashTable}
@@ -520,7 +826,7 @@ export async function getCrashlyticsOverview(
           `
       ),
       queryBigQuery(
-        BIGQUERY_PROJECT_ID,
+        bigQueryQueryProjectId,
         `
             WITH sessions AS (
               SELECT DISTINCT instance_id
@@ -588,17 +894,60 @@ export async function getCrashlyticsOverview(
         `Fatal crashes: ${formatWholeNumber(fatalCrashes)}`,
         `Non-fatal issues: ${formatWholeNumber(nonFatalIssues)}`,
       ],
+      health: buildHealth(
+        "ok",
+        "Crashlytics export tables and BigQuery query execution are both accessible.",
+        [
+          {
+            label: "BigQuery query jobs",
+            status: "ok",
+            detail: `Query jobs are running in ${bigQueryQueryProjectId}.`,
+          },
+          {
+            label: "Crashlytics export datasets",
+            status: "ok",
+            detail: `Reading ${CRASHLYTICS_DATASET} and ${SESSIONS_DATASET} in ${BIGQUERY_DATA_PROJECT_ID}.`,
+          },
+        ],
+        crashlyticsDetectedValues
+      ),
     };
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Unknown Crashlytics error";
+    const { message } = parseGoogleApiError(error);
+
+    const crashlyticsHealth = buildHealth(
+      "action-required",
+      message.includes("bigquery.jobs.create")
+        ? "Crashlytics data export tables may exist, but the credentials cannot create BigQuery query jobs in the selected query project."
+        : "Crashlytics access is partially configured, but one of the required BigQuery permissions or datasets is still missing.",
+      [
+        {
+          label: "BigQuery query jobs",
+          status: message.includes("bigquery.jobs.create")
+            ? "error"
+            : "warning",
+          detail: message.includes("bigquery.jobs.create")
+            ? `Grant BigQuery Job User on ${bigQueryQueryProjectId}, or point CRASHLYTICS_BIGQUERY_QUERY_PROJECT_ID at a project where this service account can create jobs.`
+            : message,
+        },
+        {
+          label: "Crashlytics export datasets",
+          status: message.includes("bigquery.jobs.create")
+            ? "warning"
+            : "error",
+          detail: `Expected datasets: ${CRASHLYTICS_DATASET} and ${SESSIONS_DATASET} in ${BIGQUERY_DATA_PROJECT_ID}.`,
+        },
+      ],
+      crashlyticsDetectedValues
+    );
 
     return buildEmptyOverview(
       appId,
       "Firebase Crashlytics via BigQuery",
-      `Unable to load Crashlytics export data for ${appConfig.label}. Enable BigQuery export for Crashlytics and Firebase Sessions, then verify dataset access. ${message}`,
+      buildBigQueryAccessMessage(appConfig.label, message),
       defaultCrashlyticsSummary(),
-      defaultHighlights
+      defaultHighlights,
+      crashlyticsHealth
     );
   }
 }

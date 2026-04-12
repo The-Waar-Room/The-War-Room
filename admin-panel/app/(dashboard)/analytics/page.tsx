@@ -5,8 +5,9 @@ import {
   ArrowRight,
   Activity,
   Globe2,
-  Smartphone,
   Clock3,
+  CircleAlert,
+  CheckCircle2,
 } from "lucide-react";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +31,38 @@ interface AnalyticsOverviewResponse {
   message: string;
   summary: IntegrationMetric[];
   highlights: string[];
+  health: {
+    state: "ok" | "action-required";
+    summary: string;
+    checks: Array<{
+      label: string;
+      status: "ok" | "warning" | "error";
+      detail: string;
+    }>;
+    detectedValues: Array<{
+      label: string;
+      value: string | null;
+    }>;
+  };
+}
+
+function healthTone(status: "ok" | "warning" | "error") {
+  if (status === "ok") {
+    return {
+      icon: CheckCircle2,
+      iconClassName: "text-emerald-600",
+      pillClassName: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    };
+  }
+
+  return {
+    icon: CircleAlert,
+    iconClassName: status === "error" ? "text-rose-600" : "text-amber-600",
+    pillClassName:
+      status === "error"
+        ? "border-rose-200 bg-rose-50 text-rose-800"
+        : "border-amber-200 bg-amber-50 text-amber-800",
+  };
 }
 
 const guideCards = [
@@ -187,6 +220,70 @@ export default function AnalyticsPage() {
               </div>
               <div className="rounded-2xl border border-dashed bg-muted/20 p-4 text-sm text-muted-foreground">
                 {data.message}
+              </div>
+              <div className="rounded-2xl border bg-slate-50 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-semibold text-slate-900">
+                    Integration Health
+                  </p>
+                  <Badge
+                    variant={data.health.state === "ok" ? "success" : "outline"}
+                  >
+                    {data.health.state === "ok" ? "Healthy" : "Action needed"}
+                  </Badge>
+                </div>
+                <p className="mt-2 text-xs text-slate-600">
+                  {data.health.summary}
+                </p>
+                <div className="mt-3 space-y-2">
+                  {data.health.checks.map((check) => {
+                    const tone = healthTone(check.status);
+                    const Icon = tone.icon;
+
+                    return (
+                      <div
+                        key={check.label}
+                        className="rounded-xl border bg-white p-3"
+                      >
+                        <div className="flex items-start gap-2">
+                          <Icon
+                            className={`mt-0.5 h-4 w-4 ${tone.iconClassName}`}
+                          />
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <p className="text-xs font-semibold text-slate-900">
+                                {check.label}
+                              </p>
+                              <span
+                                className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${tone.pillClassName}`}
+                              >
+                                {check.status}
+                              </span>
+                            </div>
+                            <p className="mt-1 text-xs text-slate-600">
+                              {check.detail}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {data.health.detectedValues.map((item) => (
+                    <div
+                      key={item.label}
+                      className="rounded-xl border border-dashed bg-white p-3"
+                    >
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                        {item.label}
+                      </p>
+                      <p className="mt-1 break-all text-xs text-slate-700">
+                        {item.value ?? "Not detected"}
+                      </p>
+                    </div>
+                  ))}
+                </div>
               </div>
               <div className="rounded-2xl border bg-slate-50 p-4">
                 <p className="text-sm font-semibold text-slate-900">
