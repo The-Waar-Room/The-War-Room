@@ -9,18 +9,28 @@ interface ChatAppProfile {
   moderationRedirectSuggestions: string[];
 }
 
+const DESCROLL_APP_NAME = "deScroll";
+const DESCROLL_APP_KEY = DESCROLL_APP_NAME.toLowerCase();
+const SOULLENS_APP_KEY = "soullens";
+
 function isDeScrollApp(appId: string, appName: string): boolean {
   const normalizedAppId = appId.trim().toLowerCase();
   const normalizedAppName = appName.trim().toLowerCase();
 
-  return normalizedAppId.includes("descroll") || normalizedAppName.includes("descroll");
+  return (
+    normalizedAppId.includes(DESCROLL_APP_KEY) ||
+    normalizedAppName.includes(DESCROLL_APP_KEY)
+  );
 }
 
 function isSoulLensApp(appId: string, appName: string): boolean {
   const normalizedAppId = appId.trim().toLowerCase();
   const normalizedAppName = appName.trim().toLowerCase();
 
-  return normalizedAppId.includes("soullens") || normalizedAppName.includes("soullens");
+  return (
+    normalizedAppId.includes(SOULLENS_APP_KEY) ||
+    normalizedAppName.includes(SOULLENS_APP_KEY)
+  );
 }
 
 function deScrollFallbackFollowUps(message: string, answer: string): string[] {

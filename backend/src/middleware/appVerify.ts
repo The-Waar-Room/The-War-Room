@@ -3,14 +3,25 @@ import { createHash } from "crypto";
 import { getFirestore } from "../config/firebase";
 import { AuthenticatedRequest, AppDoc } from "../types";
 
-function canonicalizeAppId(appId: string): string {
-  const normalized = appId.trim().toLowerCase();
+const DESCROLL_APP_ID = "deScroll";
+const SOULLENS_APP_ID = "soullens";
 
-  if (normalized === "descroll") {
-    return "deScroll";
+function normalizeAppKey(value: string): string {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function canonicalizeAppId(appId: string): string {
+  const normalized = normalizeAppKey(appId);
+
+  if (normalized === normalizeAppKey(DESCROLL_APP_ID)) {
+    return DESCROLL_APP_ID;
   }
 
-  return normalized;
+  if (normalized === normalizeAppKey(SOULLENS_APP_ID)) {
+    return SOULLENS_APP_ID;
+  }
+
+  return appId.trim();
 }
 
 /**
@@ -38,24 +49,30 @@ export async function appVerify(
     }
 
     const db = getFirestore();
-    const appIdCandidates = Array.from(new Set([appId.trim(), appId.trim().toLowerCase()]));
+    const canonicalAppId = canonicalizeAppId(appId);
+    const normalizedInput = normalizeAppKey(appId);
+    const normalizedCanonical = normalizeAppKey(canonicalAppId);
 
-    let appSnap: FirebaseFirestore.DocumentSnapshot | null = null;
-    for (const candidate of appIdCandidates) {
-      const candidateSnap = await db.collection("apps").doc(candidate).get();
-      if (candidateSnap.exists) {
-        appSnap = candidateSnap;
-        break;
-      }
-    }
+    const appSnap = await db.collection("apps").get();
+    const matchedApp = appSnap.docs.find((doc) => {
+      const appData = doc.data() as AppDoc;
+      const candidateKeys = [doc.id, appData.app_id, appData.app_name]
+        .filter((value): value is string => typeof value === "string" && value.length > 0)
+        .map((value) => normalizeAppKey(value));
 
-    if (!appSnap?.exists) {
+      return (
+        candidateKeys.includes(normalizedInput) ||
+        candidateKeys.includes(normalizedCanonical)
+      );
+    });
+
+    if (!matchedApp?.exists) {
       console.warn(`[appVerify] REJECT: App doc not found for appId="${appId}"`);
       res.status(401).json({ success: false, error: "Invalid app credentials" });
       return;
     }
 
-    const appDoc = appSnap.data() as AppDoc;
+    const appDoc = matchedApp.data() as AppDoc;
 
     if (!appDoc.is_active) {
       res.status(403).json({ success: false, error: "App is disabled" });
@@ -71,7 +88,7 @@ export async function appVerify(
       return;
     }
 
-    req.appId = canonicalizeAppId(appId);
+    req.appId = canonicalAppId;
     req.appDoc = appDoc;
     next();
   } catch (err) {

@@ -1,5 +1,7 @@
 import { getChatAppProfile } from "./chatAppProfileService";
 
+const DESCROLL_APP_KEYWORD = "deScroll".toLowerCase();
+
 const WELLNESS_KEYWORDS = [
   "screen time",
   "screentime",
@@ -9,7 +11,7 @@ const WELLNESS_KEYWORDS = [
   "scrolling",
   "phone addiction",
   "digital wellness",
-  "descroll",
+  DESCROLL_APP_KEYWORD,
   "usage",
   "habit",
   "attention",
