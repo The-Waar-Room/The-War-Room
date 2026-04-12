@@ -1,18 +1,16 @@
-export type AdminAppId = "descroll" | "soullens";
+export type AdminAppId = "deScroll" | "soullens";
 
 export const ADMIN_APPS: Array<{ id: AdminAppId; label: string }> = [
-  { id: "descroll", label: "deScroll" },
+  { id: "deScroll", label: "deScroll" },
   { id: "soullens", label: "SoulLens" },
 ];
 
-export const DEFAULT_ADMIN_APP_ID: AdminAppId = "descroll";
+export const DEFAULT_ADMIN_APP_ID: AdminAppId = "deScroll";
 
 const ADMIN_APP_ALIASES: Record<string, AdminAppId> = {
-  descroll: "descroll",
-  descrollapp: "descroll",
-  deScroll: "descroll",
-  descrolldescroll: "descroll",
-  comsudoajaydescroll: "descroll",
+  descroll: "deScroll",
+  comsudoajaydescroll: "deScroll",
+  deScroll: "deScroll",
   soullens: "soullens",
   comsudoajaysoullens: "soullens",
 };
@@ -50,4 +48,14 @@ export function getAdminAppSearchParam(appId: string): string {
 
 export function getAdminAppHref(pathname: string, appId: string): string {
   return `${pathname}?${getAdminAppSearchParam(appId)}`;
+}
+
+export function getAdminAppQueryValues(appId: string): string[] {
+  const normalizedAppId = normalizeAdminAppId(appId);
+
+  if (normalizedAppId === "deScroll") {
+    return ["deScroll", "descroll"];
+  }
+
+  return [normalizedAppId];
 }

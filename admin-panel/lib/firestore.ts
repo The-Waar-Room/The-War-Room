@@ -1,3 +1,4 @@
+import { getAdminAppQueryValues, normalizeAdminAppId } from "@/lib/admin-apps";
 import { adminDb } from "@/lib/firebase-admin";
 
 export const INR_RATE = 84;
@@ -84,6 +85,20 @@ function toDateKey(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
+function applyAppIdFilter(
+  query: FirebaseFirestore.Query,
+  appId?: string
+): FirebaseFirestore.Query {
+  if (!appId || appId === "all") {
+    return query;
+  }
+
+  const filterValues = getAdminAppQueryValues(normalizeAdminAppId(appId));
+  return filterValues.length === 1
+    ? query.where("app_id", "==", filterValues[0])
+    : query.where("app_id", "in", filterValues);
+}
+
 export async function getAdminRole(email?: string | null): Promise<AdminRole> {
   if (!email) return null;
   const normalized = email.toLowerCase();
@@ -107,25 +122,18 @@ export async function getDashboardSummary(
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 29);
   const thirtyDaysAgoKey = toDateKey(thirtyDaysAgo);
 
-  const usersQuery =
-    appId === "all"
-      ? adminDb.collection("users")
-      : adminDb.collection("users").where("app_id", "==", appId);
+  const usersQuery = applyAppIdFilter(adminDb.collection("users"), appId);
 
-  const subsQuery =
-    appId === "all"
-      ? adminDb.collection("subscriptions").where("status", "==", "active")
-      : adminDb
-          .collection("subscriptions")
-          .where("status", "==", "active")
-          .where("app_id", "==", appId);
+  const subsQuery = applyAppIdFilter(
+    adminDb.collection("subscriptions").where("status", "==", "active"),
+    appId
+  );
 
   // Fetch last 30 days of usage for messagesByDay chart
-  let usageLast30Query: FirebaseFirestore.Query =
-    adminDb.collection("ai_usage");
-  if (appId !== "all") {
-    usageLast30Query = usageLast30Query.where("app_id", "==", appId);
-  }
+  let usageLast30Query: FirebaseFirestore.Query = applyAppIdFilter(
+    adminDb.collection("ai_usage"),
+    appId
+  );
   usageLast30Query = usageLast30Query
     .where("date", ">=", thirtyDaysAgoKey)
     .orderBy("date", "desc")
@@ -164,10 +172,10 @@ export async function getDashboardSummary(
   const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
   const sixMonthsAgo = new Date(today.getFullYear(), today.getMonth() - 5, 1);
 
-  const monthSubsQuery =
-    appId === "all"
-      ? adminDb.collection("subscriptions")
-      : adminDb.collection("subscriptions").where("app_id", "==", appId);
+  const monthSubsQuery = applyAppIdFilter(
+    adminDb.collection("subscriptions"),
+    appId
+  );
 
   const allSubs = await monthSubsQuery.get();
   const revenueByMonthMap: Record<string, number> = {};
@@ -225,18 +233,17 @@ export async function getAppsList(): Promise<AppInfo[]> {
 export async function getAppWithStats(appId: string) {
   const today = new Date().toISOString().slice(0, 10);
   const [usersSnap, subsSnap, usageSnap] = await Promise.all([
-    adminDb.collection("users").where("app_id", "==", appId).count().get(),
-    adminDb
-      .collection("subscriptions")
-      .where("app_id", "==", appId)
-      .where("status", "==", "active")
+    applyAppIdFilter(adminDb.collection("users"), appId).count().get(),
+    applyAppIdFilter(
+      adminDb.collection("subscriptions").where("status", "==", "active"),
+      appId
+    )
       .count()
       .get(),
-    adminDb
-      .collection("ai_usage")
-      .where("app_id", "==", appId)
-      .where("date", "==", today)
-      .get(),
+    applyAppIdFilter(
+      adminDb.collection("ai_usage").where("date", "==", today),
+      appId
+    ).get(),
   ]);
 
   let messagesToday = 0;
@@ -262,10 +269,7 @@ export async function getUsers(
   limit = 50,
   offset = 0
 ): Promise<{ users: UserInfo[]; total: number }> {
-  let query: FirebaseFirestore.Query = adminDb.collection("users");
-  if (appId && appId !== "all") {
-    query = query.where("app_id", "==", appId);
-  }
+  const query = applyAppIdFilter(adminDb.collection("users"), appId);
 
   const countSnap = await query.count().get();
   const total = countSnap.data().count;
@@ -342,10 +346,10 @@ export async function getSubscriptions(
   status?: string,
   limit = 50
 ): Promise<SubscriptionInfo[]> {
-  let query: FirebaseFirestore.Query = adminDb.collection("subscriptions");
-  if (appId && appId !== "all") {
-    query = query.where("app_id", "==", appId);
-  }
+  let query: FirebaseFirestore.Query = applyAppIdFilter(
+    adminDb.collection("subscriptions"),
+    appId
+  );
   if (status) {
     query = query.where("status", "==", status);
   }
@@ -370,10 +374,10 @@ export async function getSubscriptions(
 }
 
 export async function getSubscriptionStats(appId?: string) {
-  const baseQuery =
-    appId && appId !== "all"
-      ? adminDb.collection("subscriptions").where("app_id", "==", appId)
-      : adminDb.collection("subscriptions");
+  const baseQuery = applyAppIdFilter(
+    adminDb.collection("subscriptions"),
+    appId
+  );
 
   const [activeSnap, totalSnap] = await Promise.all([
     baseQuery.where("status", "==", "active").count().get(),
@@ -381,13 +385,9 @@ export async function getSubscriptionStats(appId?: string) {
   ]);
 
   // Get plan distribution
-  const activeSubs = await (
-    appId && appId !== "all"
-      ? adminDb
-          .collection("subscriptions")
-          .where("app_id", "==", appId)
-          .where("status", "==", "active")
-      : adminDb.collection("subscriptions").where("status", "==", "active")
+  const activeSubs = await applyAppIdFilter(
+    adminDb.collection("subscriptions").where("status", "==", "active"),
+    appId
   ).get();
 
   const planCounts: Record<string, number> = {};
@@ -416,10 +416,10 @@ export async function getAiUsageRecords(
     dates.push(d.toISOString().slice(0, 10));
   }
 
-  let query: FirebaseFirestore.Query = adminDb.collection("ai_usage");
-  if (appId && appId !== "all") {
-    query = query.where("app_id", "==", appId);
-  }
+  let query: FirebaseFirestore.Query = applyAppIdFilter(
+    adminDb.collection("ai_usage"),
+    appId
+  );
   // Fetch last N days
   query = query
     .where("date", ">=", dates[dates.length - 1])
@@ -906,10 +906,10 @@ export async function getTopUsersByCost(
     dates.push(d.toISOString().slice(0, 10));
   }
 
-  let query: FirebaseFirestore.Query = adminDb.collection("ai_usage");
-  if (appId !== "all") {
-    query = query.where("app_id", "==", appId);
-  }
+  let query: FirebaseFirestore.Query = applyAppIdFilter(
+    adminDb.collection("ai_usage"),
+    appId
+  );
   query = query
     .where("date", ">=", dates[dates.length - 1])
     .orderBy("date", "desc")
@@ -973,16 +973,11 @@ export async function getAlerts(appId: string = "all"): Promise<AlertItem[]> {
   const [configDoc, todayUsageSnap, subsSnap, chatEventsSnap] =
     await Promise.all([
       adminDb.collection("config").doc("global").get(),
-      (() => {
-        let q: FirebaseFirestore.Query = adminDb.collection("ai_usage");
-        if (appId !== "all") q = q.where("app_id", "==", appId);
-        return q.where("date", "==", todayKey).get();
-      })(),
-      (() => {
-        let q: FirebaseFirestore.Query = adminDb.collection("subscriptions");
-        if (appId !== "all") q = q.where("app_id", "==", appId);
-        return q.get();
-      })(),
+      applyAppIdFilter(
+        adminDb.collection("ai_usage").where("date", "==", todayKey),
+        appId
+      ).get(),
+      applyAppIdFilter(adminDb.collection("subscriptions"), appId).get(),
       (() => {
         const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
         return adminDb
@@ -1192,16 +1187,18 @@ export async function getSupportTickets(
   limit = 50,
   offset = 0
 ): Promise<{ tickets: SupportTicket[]; total: number }> {
-  let countQuery: FirebaseFirestore.Query =
-    adminDb.collection("support_tickets");
-  if (appId && appId !== "all")
-    countQuery = countQuery.where("app_id", "==", appId);
+  let countQuery: FirebaseFirestore.Query = applyAppIdFilter(
+    adminDb.collection("support_tickets"),
+    appId
+  );
   if (status) countQuery = countQuery.where("status", "==", status);
   const countSnap = await countQuery.count().get();
   const total = countSnap.data().count;
 
-  let query: FirebaseFirestore.Query = adminDb.collection("support_tickets");
-  if (appId && appId !== "all") query = query.where("app_id", "==", appId);
+  let query: FirebaseFirestore.Query = applyAppIdFilter(
+    adminDb.collection("support_tickets"),
+    appId
+  );
   if (status) query = query.where("status", "==", status);
 
   const snap = await query.get();
@@ -1316,10 +1313,7 @@ export async function getTicketStats(appId?: string): Promise<{
   resolved: number;
   closed: number;
 }> {
-  const base =
-    appId && appId !== "all"
-      ? adminDb.collection("support_tickets").where("app_id", "==", appId)
-      : adminDb.collection("support_tickets");
+  const base = applyAppIdFilter(adminDb.collection("support_tickets"), appId);
 
   const [totalSnap, openSnap, wcSnap, wsSnap, resolvedSnap, closedSnap] =
     await Promise.all([

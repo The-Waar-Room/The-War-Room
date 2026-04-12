@@ -3,6 +3,16 @@ import { createHash } from "crypto";
 import { getFirestore } from "../config/firebase";
 import { AuthenticatedRequest, AppDoc } from "../types";
 
+function canonicalizeAppId(appId: string): string {
+  const normalized = appId.trim().toLowerCase();
+
+  if (normalized === "descroll") {
+    return "deScroll";
+  }
+
+  return normalized;
+}
+
 /**
  * Middleware 1: Verify x-app-id + x-app-secret headers.
  * - Looks up app document in Firestore apps collection
@@ -28,10 +38,18 @@ export async function appVerify(
     }
 
     const db = getFirestore();
-    const normalizedAppId = appId.toLowerCase();
-    const appSnap = await db.collection("apps").doc(normalizedAppId).get();
+    const appIdCandidates = Array.from(new Set([appId.trim(), appId.trim().toLowerCase()]));
 
-    if (!appSnap.exists) {
+    let appSnap: FirebaseFirestore.DocumentSnapshot | null = null;
+    for (const candidate of appIdCandidates) {
+      const candidateSnap = await db.collection("apps").doc(candidate).get();
+      if (candidateSnap.exists) {
+        appSnap = candidateSnap;
+        break;
+      }
+    }
+
+    if (!appSnap?.exists) {
       console.warn(`[appVerify] REJECT: App doc not found for appId="${appId}"`);
       res.status(401).json({ success: false, error: "Invalid app credentials" });
       return;
@@ -53,7 +71,7 @@ export async function appVerify(
       return;
     }
 
-    req.appId = appId;
+    req.appId = canonicalizeAppId(appId);
     req.appDoc = appDoc;
     next();
   } catch (err) {

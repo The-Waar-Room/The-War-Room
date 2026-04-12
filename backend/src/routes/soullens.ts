@@ -46,7 +46,7 @@ soullensRouter.post(
       const updates: Partial<SoulLensProfile> = {};
 
       if (body.selectedReligion !== undefined) {
-        if (body.selectedReligion !== null && !isSoulLensReligion(body.selectedReligion)) {
+        if (!isSoulLensReligion(body.selectedReligion)) {
           res.status(400).json({ success: false, error: "Invalid religion" });
           return;
         }
@@ -106,23 +106,9 @@ soullensRouter.get(
   "/daily-verse",
   appVerify,
   authMiddleware,
-  async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  async (_req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
-      const requestedReligion = req.query.religion;
-      let religion: string | null =
-        typeof requestedReligion === "string" ? requestedReligion : null;
-
-      if (!religion) {
-        const profile = await getSoulLensProfile(req.decodedToken!.uid);
-        religion = profile.selectedReligion;
-      }
-
-      if (!religion || !isSoulLensReligion(religion)) {
-        res.status(400).json({ success: false, error: "Religion selection is required" });
-        return;
-      }
-
-      const verse = getSoulLensDailyVerse(religion);
+      const verse = getSoulLensDailyVerse("hinduism");
       res.json({ success: true, data: verse });
     } catch (err) {
       console.error("[soullens/daily-verse] Error:", err);
@@ -137,18 +123,12 @@ soullensRouter.get(
   authMiddleware,
   async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
-      const religion = req.query.religion;
-      if (typeof religion !== "string" || !isSoulLensReligion(religion)) {
-        res.status(400).json({ success: false, error: "Valid religion is required" });
-        return;
-      }
-
       const search =
         typeof req.query.search === "string" ? req.query.search.trim().toLowerCase() : "";
       const theme = typeof req.query.theme === "string" ? req.query.theme.trim().toLowerCase() : "";
       const mood = typeof req.query.mood === "string" ? req.query.mood.trim().toLowerCase() : "";
 
-      const verses = getSoulLensVerses(religion).filter((verse) => {
+      const verses = getSoulLensVerses("hinduism").filter((verse) => {
         const matchesSearch =
           search.length === 0 ||
           verse.reference.toLowerCase().includes(search) ||
@@ -174,25 +154,19 @@ soullensRouter.get(
   authMiddleware,
   async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
-      const religion = req.query.religion;
-      if (typeof religion !== "string" || !isSoulLensReligion(religion)) {
-        res.status(400).json({ success: false, error: "Valid religion is required" });
-        return;
-      }
-
       const verseId = req.params.verseId;
       if (typeof verseId !== "string") {
         res.status(400).json({ success: false, error: "Verse ID is required" });
         return;
       }
 
-      const verse = getSoulLensVerseById(religion, verseId);
+      const verse = getSoulLensVerseById("hinduism", verseId);
       if (!verse) {
         res.status(404).json({ success: false, error: "Verse not found" });
         return;
       }
 
-      const related = getSoulLensVerses(religion)
+      const related = getSoulLensVerses("hinduism")
         .filter((item) => item.id !== verse.id)
         .filter((item) => item.themes.some((theme) => verse.themes.includes(theme)))
         .slice(0, 3);

@@ -3,12 +3,12 @@ import { FieldValue } from "firebase-admin/firestore";
 import { getFirestore } from "../config/firebase";
 import { getModel } from "../config/vertexai";
 
-export type SoulLensReligion = "hinduism" | "islam" | "christianity" | "judaism" | "buddhism";
+export type SoulLensReligion = "hinduism";
 
 export type SoulLensEmotion = "anxious" | "lost" | "angry" | "motivated" | "grateful" | "grieving";
 
 export interface SoulLensProfile {
-  selectedReligion: SoulLensReligion | null;
+  selectedReligion: SoulLensReligion;
   sacredMomentTime: string | null;
   languagePreference: string;
   themeMode: "system" | "light" | "dark" | "sepia" | "midnight";
@@ -46,13 +46,7 @@ interface GenerateInsightResult {
 
 const PROMPT_VERSION = "2026-04-10-v1";
 
-const SUPPORTED_RELIGIONS: SoulLensReligion[] = [
-  "hinduism",
-  "islam",
-  "christianity",
-  "judaism",
-  "buddhism",
-];
+const SUPPORTED_RELIGIONS: SoulLensReligion[] = ["hinduism"];
 
 const SUPPORTED_EMOTIONS: SoulLensEmotion[] = [
   "anxious",
@@ -64,7 +58,7 @@ const SUPPORTED_EMOTIONS: SoulLensEmotion[] = [
 ];
 
 const DEFAULT_PROFILE: SoulLensProfile = {
-  selectedReligion: null,
+  selectedReligion: "hinduism",
   sacredMomentTime: null,
   languagePreference: "en",
   themeMode: "system",
@@ -101,122 +95,6 @@ const PLACEHOLDER_VERSES: Record<SoulLensReligion, SoulLensVerse[]> = {
         "Placeholder context: inner discipline and self-guidance during moments of struggle.",
       themes: ["self-mastery", "resilience"],
       moods: ["lost", "grieving", "motivated"],
-      isPlaceholder: true,
-    },
-  ],
-  islam: [
-    {
-      id: "quran-placeholder-1",
-      religion: "islam",
-      scriptureName: "Quran",
-      reference: "Surah Ash-Sharh 94:5",
-      originalText: "Fa-inna ma'a al-'usri yusra.",
-      transliteration: "Fa-inna ma'a al-'usri yusra.",
-      translation:
-        "With hardship comes ease. This placeholder rendering is used until the licensed text set is imported.",
-      context:
-        "Placeholder context: reassurance that difficulty is not the whole story and relief is part of the path.",
-      themes: ["hope", "patience", "trust"],
-      moods: ["anxious", "grieving", "lost"],
-      isPlaceholder: true,
-    },
-    {
-      id: "quran-placeholder-2",
-      religion: "islam",
-      scriptureName: "Quran",
-      reference: "Surah Al-Baqarah 2:286",
-      originalText: "La yukallifu Allahu nafsan illa wus'aha.",
-      transliteration: "La yukallifu Allahu nafsan illa wus'aha.",
-      translation:
-        "No soul is burdened beyond its capacity. This placeholder rendering is for implementation only.",
-      context: "Placeholder context: a reminder of mercy, proportion, and human capacity.",
-      themes: ["mercy", "strength", "endurance"],
-      moods: ["anxious", "angry", "grieving"],
-      isPlaceholder: true,
-    },
-  ],
-  christianity: [
-    {
-      id: "bible-placeholder-1",
-      religion: "christianity",
-      scriptureName: "Holy Bible",
-      reference: "Matthew 11:28",
-      originalText: "Come to me, all who are weary and burdened.",
-      translation:
-        "Come to me, all who are weary and burdened, and you will find rest. This placeholder wording is for development until licensed copy is loaded.",
-      context:
-        "Placeholder context: an invitation to rest, trust, and bring heaviness into the light.",
-      themes: ["rest", "comfort", "trust"],
-      moods: ["anxious", "grieving", "lost"],
-      isPlaceholder: true,
-    },
-    {
-      id: "bible-placeholder-2",
-      religion: "christianity",
-      scriptureName: "Holy Bible",
-      reference: "Joshua 1:9",
-      originalText: "Be strong and courageous.",
-      translation:
-        "Be strong and courageous; do not be afraid. This placeholder wording is for product implementation only.",
-      context: "Placeholder context: courage rooted in presence rather than self-reliance alone.",
-      themes: ["courage", "presence", "hope"],
-      moods: ["anxious", "motivated", "angry"],
-      isPlaceholder: true,
-    },
-  ],
-  judaism: [
-    {
-      id: "torah-placeholder-1",
-      religion: "judaism",
-      scriptureName: "Torah",
-      reference: "Deuteronomy 31:8",
-      originalText: "He goes before you and will be with you.",
-      translation:
-        "The Holy One goes before you and stays with you. This placeholder wording is for development until the approved corpus is imported.",
-      context: "Placeholder context: reassurance before uncertainty and transition.",
-      themes: ["presence", "courage", "guidance"],
-      moods: ["anxious", "lost", "grieving"],
-      isPlaceholder: true,
-    },
-    {
-      id: "torah-placeholder-2",
-      religion: "judaism",
-      scriptureName: "Torah",
-      reference: "Leviticus 19:18",
-      originalText: "Love your neighbor as yourself.",
-      translation:
-        "Love your neighbor as yourself. This placeholder wording supports UI development only.",
-      context: "Placeholder context: holiness expressed through ordinary acts of justice and care.",
-      themes: ["compassion", "justice", "community"],
-      moods: ["angry", "grateful", "motivated"],
-      isPlaceholder: true,
-    },
-  ],
-  buddhism: [
-    {
-      id: "dhammapada-placeholder-1",
-      religion: "buddhism",
-      scriptureName: "Dhammapada",
-      reference: "Verse 1",
-      originalText: "Mind precedes all things.",
-      translation:
-        "Mind shapes experience. This placeholder wording is for development until the licensed set is available.",
-      context: "Placeholder context: attention and intention shape the way suffering is carried.",
-      themes: ["mindfulness", "attention", "clarity"],
-      moods: ["anxious", "angry", "lost"],
-      isPlaceholder: true,
-    },
-    {
-      id: "dhammapada-placeholder-2",
-      religion: "buddhism",
-      scriptureName: "Dhammapada",
-      reference: "Verse 5",
-      originalText: "Hatred is never ended by hatred.",
-      translation:
-        "Hatred is not ended by more hatred, but by understanding. This placeholder wording is for implementation only.",
-      context: "Placeholder context: the path out of anger is non-reactivity and compassion.",
-      themes: ["compassion", "peace", "non-reactivity"],
-      moods: ["angry", "grieving", "grateful"],
       isPlaceholder: true,
     },
   ],

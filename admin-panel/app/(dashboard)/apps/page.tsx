@@ -5,7 +5,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import type { AppInfo } from "@/lib/firestore";
-import { ADMIN_APPS, getAdminAppLabel, isAdminAppId } from "@/lib/admin-apps";
+import {
+  ADMIN_APPS,
+  getAdminAppLabel,
+  normalizeAdminAppId,
+} from "@/lib/admin-apps";
 
 interface AppWithStats extends AppInfo {
   userCount: number;
@@ -30,8 +34,8 @@ export default function AppsPage() {
   );
   const allowedAppIds = new Set(ADMIN_APPS.map((app) => app.id));
   const apps =
-    data?.apps?.filter(
-      (app) => isAdminAppId(app.id) && allowedAppIds.has(app.id)
+    data?.apps?.filter((app) =>
+      allowedAppIds.has(normalizeAdminAppId(app.id))
     ) ?? [];
 
   return (
