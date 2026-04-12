@@ -564,7 +564,7 @@ export async function getAnalyticsOverview(
                 { name: "activeUsers" },
                 { name: "totalUsers" },
                 { name: "userEngagementDuration" },
-                { name: "engagedSessionsPerActiveUser" },
+                { name: "engagedSessions" },
               ],
             },
             {
@@ -616,7 +616,7 @@ export async function getAnalyticsOverview(
     const activeUsers = parseMetricValue(reports[0], 0);
     const totalUsers = parseMetricValue(reports[0], 1);
     const engagementSeconds = parseMetricValue(reports[0], 2);
-    const engagedSessionsPerActiveUser = parseMetricValue(reports[0], 3);
+    const engagedSessions = parseMetricValue(reports[0], 3);
     const topVersion = parseFirstRow(reports[1]);
     const topEvent = parseFirstRow(reports[2]);
     const topCountry = parseFirstRow(reports[3]);
@@ -627,6 +627,8 @@ export async function getAnalyticsOverview(
 
     const averageEngagementSeconds =
       activeUsers > 0 ? engagementSeconds / activeUsers : 0;
+    const engagedSessionsPerActiveUser =
+      activeUsers > 0 ? engagedSessions / activeUsers : 0;
 
     return {
       appId,
