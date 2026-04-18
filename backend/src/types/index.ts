@@ -144,7 +144,7 @@ export interface SubscriptionVerifyBody {
   purchaseToken: string;
   productId: string;
   packageName: string;
-  basePlanId?: string;
+  basePlanId: string;
   purchaseState?: number;
   orderId?: string;
   purchaseTimeMillis?: number;

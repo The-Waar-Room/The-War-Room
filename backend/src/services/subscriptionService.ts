@@ -207,7 +207,8 @@ export async function verifyGooglePlaySubscription(
   appId: string,
   purchaseToken: string,
   productId: string,
-  packageName: string
+  packageName: string,
+  basePlanId: string
 ): Promise<VerifyResult> {
   const snapshot = await fetchGooglePlaySubscriptionSnapshot(purchaseToken, productId, packageName);
 
@@ -236,10 +237,10 @@ export async function verifyGooglePlaySubscription(
     };
   }
 
-  // ── Map product to plan ──
-  const mapping = PRODUCT_TO_PLAN[productId];
+  // ── Map base plan to plan type (basePlanId matches PRODUCT_TO_PLAN keys) ──
+  const mapping = PRODUCT_TO_PLAN[basePlanId];
   if (!mapping) {
-    throw new Error(`Unknown productId: ${productId}`);
+    throw new Error(`Unknown basePlanId: ${basePlanId}`);
   }
 
   const startsAt = new Date();
@@ -368,10 +369,13 @@ export async function reconcileSubscriptionFromGoogle({
     existingData?.expires_at?.toDate?.()?.getTime?.() !== snapshot.expiresAt.getTime();
 
   if (existingDoc) {
+    // Preserve existing plan_type if snapshot couldn't resolve it (productId != basePlanId)
+    const resolvedPlanType = snapshot.planType !== "free" ? snapshot.planType : (existingData?.plan_type ?? snapshot.planType);
+
     await existingDoc.ref.update({
       app_id: resolvedAppId,
       user_id: resolvedUserId,
-      plan_type: snapshot.planType,
+      plan_type: resolvedPlanType,
       product_id: productId,
       status: snapshot.status,
       expires_at: snapshot.expiresAt,

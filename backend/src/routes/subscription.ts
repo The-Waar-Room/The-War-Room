@@ -153,7 +153,7 @@ subscriptionRouter.post(
   authMiddleware,
   async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
-      const { purchaseToken, productId, packageName } = req.body as SubscriptionVerifyBody;
+      const { purchaseToken, productId, packageName, basePlanId } = req.body as SubscriptionVerifyBody;
 
       // ── Input validation ──
       if (!purchaseToken || typeof purchaseToken !== "string") {
@@ -168,6 +168,10 @@ subscriptionRouter.post(
         res.status(400).json({ success: false, error: "packageName is required" });
         return;
       }
+      if (!basePlanId || typeof basePlanId !== "string") {
+        res.status(400).json({ success: false, error: "basePlanId is required" });
+        return;
+      }
 
       const userId = req.decodedToken!.uid;
       const appId = req.appId!;
@@ -177,7 +181,8 @@ subscriptionRouter.post(
         appId,
         purchaseToken,
         productId,
-        packageName
+        packageName,
+        basePlanId
       );
 
       if (!result.success) {
