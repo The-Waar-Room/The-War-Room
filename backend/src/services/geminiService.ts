@@ -100,13 +100,14 @@ function parseStructuredChatOutput(
  * and returns the AI response with token counts.
  */
 export async function chat(params: GeminiChatParams): Promise<GeminiChatResult> {
-  const { appId, appName, message, context, planType, maxInputTokens, maxOutputTokens, history } =
+  const { appId, appName, message, context, planType, maxOutputTokens, history } =
     params;
   const appProfile = getChatAppProfile(appId, appName);
 
   // ── Build system prompt ──
-  const maxContextChars = maxInputTokens * 4; // ~4 chars per token
-  const contextStr = context ? JSON.stringify(context).slice(0, maxContextChars) : "";
+  // Context and history flow freely to Gemini (large context window).
+  // max_input_tokens only limits the user's message length, not context.
+  const contextStr = context ? JSON.stringify(context) : "";
 
   const wordLimit = planType === "free" ? "\nKeep responses under 100 words." : "";
 
