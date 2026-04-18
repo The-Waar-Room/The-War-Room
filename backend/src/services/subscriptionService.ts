@@ -3,7 +3,6 @@ import { getFirestore } from "../config/firebase";
 import {
   PRODUCT_TO_PLAN,
   SubscriptionDoc,
-  SubscriptionEventDoc,
   SubscriptionEventSource,
   SubscriptionEventType,
 } from "../types";
@@ -166,31 +165,27 @@ export async function logSubscriptionEvent({
   metadata,
 }: LogSubscriptionEventInput): Promise<void> {
   const db = getFirestore();
-  const eventDoc: Omit<SubscriptionEventDoc, "created_at" | "occurred_at"> & {
-    created_at: FieldValue;
-    occurred_at?: Date;
-  } = {
+  const eventDoc: Record<string, unknown> = {
     user_id: userId,
     app_id: appId,
     event_type: eventType,
     event_source: eventSource,
-    plan_type: planType,
-    product_id: productId,
-    base_plan_id: basePlanId,
-    purchase_token: purchaseToken,
-    purchase_state: purchaseState,
-    order_id: orderId,
-    billing_response_code: billingResponseCode,
-    billing_debug_message: billingDebugMessage,
-    old_status: oldStatus,
-    new_status: newStatus,
-    metadata,
     created_at: FieldValue.serverTimestamp(),
   };
 
-  if (occurredAt) {
-    eventDoc.occurred_at = occurredAt;
-  }
+  // Only include fields that have defined values — Firestore rejects undefined
+  if (planType !== undefined) eventDoc.plan_type = planType;
+  if (productId !== undefined) eventDoc.product_id = productId;
+  if (basePlanId !== undefined) eventDoc.base_plan_id = basePlanId;
+  if (purchaseToken !== undefined) eventDoc.purchase_token = purchaseToken;
+  if (purchaseState !== undefined) eventDoc.purchase_state = purchaseState;
+  if (orderId !== undefined) eventDoc.order_id = orderId;
+  if (billingResponseCode !== undefined) eventDoc.billing_response_code = billingResponseCode;
+  if (billingDebugMessage !== undefined) eventDoc.billing_debug_message = billingDebugMessage;
+  if (oldStatus !== undefined) eventDoc.old_status = oldStatus;
+  if (newStatus !== undefined) eventDoc.new_status = newStatus;
+  if (metadata !== undefined) eventDoc.metadata = metadata;
+  if (occurredAt) eventDoc.occurred_at = occurredAt;
 
   await db.collection("subscription_events").add(eventDoc);
 }
