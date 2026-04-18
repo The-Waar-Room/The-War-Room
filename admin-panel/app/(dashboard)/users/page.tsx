@@ -23,10 +23,12 @@ const PAGE_SIZE = 25;
 
 function ts(seconds?: number) {
   if (!seconds) return "—";
-  return new Date(seconds * 1000).toLocaleDateString("en-IN", {
+  return new Date(seconds * 1000).toLocaleString("en-IN", {
     day: "numeric",
     month: "short",
     year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
   });
 }
 

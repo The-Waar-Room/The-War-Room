@@ -90,6 +90,15 @@ export async function authMiddleware(
       return;
     }
 
+    try {
+      await userSnap.ref.update({ last_seen: FieldValue.serverTimestamp() });
+    } catch (updateErr: unknown) {
+      const updateMsg = updateErr instanceof Error ? updateErr.message : String(updateErr);
+      console.error(
+        `[authMiddleware] last_seen update failed for ${req.decodedToken!.uid} — ${updateMsg}`
+      );
+    }
+
     req.user = user;
     next();
   } catch (err: unknown) {
