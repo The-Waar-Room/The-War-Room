@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { ArrowUpDown, ChevronDown, ChevronUp } from "lucide-react";
 import { useFirestore } from "@/hooks/useFirestore";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
@@ -14,7 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { UserInfo } from "@/lib/firestore";
+import type { UserInfo, UserSortField } from "@/lib/firestore";
 import { useSelectedApp } from "@/hooks/useSelectedApp";
 import Link from "next/link";
 import { getAdminAppHref } from "@/lib/admin-apps";
@@ -36,16 +37,23 @@ function normalize(value: string) {
   return value.trim().toLowerCase();
 }
 
+type SortDirection = "asc" | "desc";
+
 export default function UsersPage() {
   const { selectedApp } = useSelectedApp();
   const [offset, setOffset] = useState(0);
   const [search, setSearch] = useState("");
+  const [sortField, setSortField] = useState<UserSortField>("joined");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
 
   const appParam = `&app=${selectedApp}`;
   const { data, isLoading, error } = useFirestore<{
     users: UserInfo[];
     total: number;
-  }>(`/api/admin/users?limit=${PAGE_SIZE}&offset=${offset}${appParam}`, 30000);
+  }>(
+    `/api/admin/users?limit=${PAGE_SIZE}&offset=${offset}${appParam}&sortField=${sortField}&sortDirection=${sortDirection}`,
+    30000
+  );
 
   const searchTerm = normalize(search);
 
@@ -65,6 +73,29 @@ export default function UsersPage() {
       normalize(value).includes(searchTerm)
     );
   });
+
+  function handleSort(field: UserSortField) {
+    setOffset(0);
+    if (field === sortField) {
+      setSortDirection((current) => (current === "desc" ? "asc" : "desc"));
+      return;
+    }
+
+    setSortField(field);
+    setSortDirection("desc");
+  }
+
+  function SortIcon({ field }: { field: UserSortField }) {
+    if (sortField !== field) {
+      return <ArrowUpDown className="h-3.5 w-3.5 text-muted-foreground" />;
+    }
+
+    return sortDirection === "desc" ? (
+      <ChevronDown className="h-3.5 w-3.5 text-foreground" />
+    ) : (
+      <ChevronUp className="h-3.5 w-3.5 text-foreground" />
+    );
+  }
 
   return (
     <section className="space-y-5">
@@ -100,11 +131,56 @@ export default function UsersPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Email</TableHead>
-                <TableHead>App</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Joined</TableHead>
-                <TableHead>Last Seen</TableHead>
+                <TableHead>
+                  <button
+                    type="button"
+                    onClick={() => handleSort("email")}
+                    className="inline-flex items-center gap-1 font-medium"
+                  >
+                    Email
+                    <SortIcon field="email" />
+                  </button>
+                </TableHead>
+                <TableHead>
+                  <button
+                    type="button"
+                    onClick={() => handleSort("app")}
+                    className="inline-flex items-center gap-1 font-medium"
+                  >
+                    App
+                    <SortIcon field="app" />
+                  </button>
+                </TableHead>
+                <TableHead>
+                  <button
+                    type="button"
+                    onClick={() => handleSort("status")}
+                    className="inline-flex items-center gap-1 font-medium"
+                  >
+                    Status
+                    <SortIcon field="status" />
+                  </button>
+                </TableHead>
+                <TableHead>
+                  <button
+                    type="button"
+                    onClick={() => handleSort("joined")}
+                    className="inline-flex items-center gap-1 font-medium"
+                  >
+                    Joined
+                    <SortIcon field="joined" />
+                  </button>
+                </TableHead>
+                <TableHead>
+                  <button
+                    type="button"
+                    onClick={() => handleSort("lastSeen")}
+                    className="inline-flex items-center gap-1 font-medium"
+                  >
+                    Last Seen
+                    <SortIcon field="lastSeen" />
+                  </button>
+                </TableHead>
                 <TableHead />
               </TableRow>
             </TableHeader>

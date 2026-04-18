@@ -27,6 +27,8 @@ export interface UserInfo {
   last_seen?: { _seconds: number };
 }
 
+export type UserSortField = "email" | "app" | "status" | "joined" | "lastSeen";
+
 export interface SubscriptionInfo {
   id: string;
   user_id: string;
@@ -288,7 +290,9 @@ export async function getAppWithStats(appId: string) {
 export async function getUsers(
   appId?: string,
   limit = 50,
-  offset = 0
+  offset = 0,
+  sortField: UserSortField = "joined",
+  sortDirection: "asc" | "desc" = "desc"
 ): Promise<{ users: UserInfo[]; total: number }> {
   const query = applyAppIdFilter(adminDb.collection("users"), appId);
 
@@ -303,11 +307,34 @@ export async function getUsers(
       ...(doc.data() as Omit<UserInfo, "id">),
     }))
     .sort((a, b) => {
-      const aTime =
-        (a.created_at as { _seconds: number } | undefined)?._seconds ?? 0;
-      const bTime =
-        (b.created_at as { _seconds: number } | undefined)?._seconds ?? 0;
-      return bTime - aTime;
+      const direction = sortDirection === "asc" ? 1 : -1;
+
+      const compareText = (left: string, right: string) =>
+        left.localeCompare(right, undefined, { sensitivity: "base" }) *
+        direction;
+
+      const getSeconds = (value?: { _seconds: number }) => value?._seconds ?? 0;
+
+      switch (sortField) {
+        case "email":
+          return compareText(a.email ?? "", b.email ?? "");
+        case "app":
+          return compareText(a.app_id ?? "", b.app_id ?? "");
+        case "status": {
+          const leftStatus = a.is_banned ? "banned" : "active";
+          const rightStatus = b.is_banned ? "banned" : "active";
+          return compareText(leftStatus, rightStatus);
+        }
+        case "lastSeen":
+          return (
+            (getSeconds(a.last_seen) - getSeconds(b.last_seen)) * direction
+          );
+        case "joined":
+        default:
+          return (
+            (getSeconds(a.created_at) - getSeconds(b.created_at)) * direction
+          );
+      }
     })
     .slice(offset, offset + limit);
 

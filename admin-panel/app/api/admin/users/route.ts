@@ -1,7 +1,15 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { normalizeAdminAppId } from "@/lib/admin-apps";
-import { getUsers } from "@/lib/firestore";
+import { getUsers, type UserSortField } from "@/lib/firestore";
+
+const SORT_FIELDS: UserSortField[] = [
+  "email",
+  "app",
+  "status",
+  "joined",
+  "lastSeen",
+];
 
 export async function GET(request: Request) {
   const session = await auth();
@@ -13,7 +21,16 @@ export async function GET(request: Request) {
   const appId = normalizeAdminAppId(searchParams.get("app"));
   const limit = Math.min(parseInt(searchParams.get("limit") || "50"), 200);
   const offset = parseInt(searchParams.get("offset") || "0");
+  const sortFieldParam = searchParams.get("sortField");
+  const sortDirectionParam = searchParams.get("sortDirection");
 
-  const result = await getUsers(appId, limit, offset);
+  const sortField: UserSortField = SORT_FIELDS.includes(
+    sortFieldParam as UserSortField
+  )
+    ? (sortFieldParam as UserSortField)
+    : "joined";
+  const sortDirection = sortDirectionParam === "asc" ? "asc" : "desc";
+
+  const result = await getUsers(appId, limit, offset, sortField, sortDirection);
   return NextResponse.json(result);
 }

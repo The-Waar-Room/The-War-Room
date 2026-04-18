@@ -32,8 +32,8 @@ chatRouter.post(
         res.status(400).json({ success: false, error: "Message is required" });
         return;
       }
-      if (message.length > 1000) {
-        res.status(400).json({ success: false, error: "Message too long (max 1000 chars)" });
+      if (message.length > 2000) {
+        res.status(400).json({ success: false, error: "Message too long (max 2000 chars)" });
         return;
       }
       if (!sessionId || typeof sessionId !== "string") {
