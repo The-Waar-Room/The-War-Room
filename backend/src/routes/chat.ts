@@ -3,12 +3,14 @@ import { createHash } from "crypto";
 import { appVerify } from "../middleware/appVerify";
 import { authMiddleware } from "../middleware/authMiddleware";
 import { killSwitch } from "../middleware/killSwitch";
-import { rateLimiter } from "../middleware/rateLimiter";
+import { rateLimiter, getUserPlan, getTodayIST } from "../middleware/rateLimiter";
 import { chat } from "../services/geminiService";
 import { moderateChatMessage } from "../services/chatModerationService";
 import { trackUsage } from "../services/usageService";
 import { writeChatEvent } from "../services/chatEventService";
-import { AuthenticatedRequest, ChatRequestBody } from "../types";
+import { AuthenticatedRequest, ChatRequestBody, toConfigPlan } from "../types";
+import { getGlobalConfig } from "../config/configCache";
+import { getRedis } from "../config/redis";
 
 export const chatRouter = Router();
 
@@ -154,6 +156,52 @@ chatRouter.post(
       }).catch((err: unknown) => console.error("[chat] writeChatEvent failed:", err));
     } catch (err) {
       console.error("[chat] Error:", err);
+      res.status(500).json({ success: false, error: "Internal server error" });
+    }
+  }
+);
+
+/**
+ * GET /api/chat/usage
+ * Returns current daily usage without sending a message.
+ * Middleware: appVerify → authMiddleware
+ */
+chatRouter.get(
+  "/usage",
+  appVerify,
+  authMiddleware,
+  async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+    try {
+      const userId = req.decodedToken!.uid;
+      const appId = req.appId!;
+
+      const planType = await getUserPlan(userId, appId);
+      const config = await getGlobalConfig();
+      const configPlan = toConfigPlan(planType);
+      const planLimits = config.plans[configPlan];
+
+      const todayIST = getTodayIST();
+      const redisKey = `rate:${userId}:${appId}:${todayIST}`;
+
+      const redis = getRedis();
+      let currentCount = 0;
+      try {
+        currentCount = (await redis.get<number>(redisKey)) ?? 0;
+      } catch {
+        currentCount = 0;
+      }
+
+      res.json({
+        success: true,
+        usage: {
+          messagesUsedToday: currentCount,
+          dailyLimit: planLimits.daily_messages,
+          remaining: Math.max(0, planLimits.daily_messages - currentCount),
+          plan: planType,
+        },
+      });
+    } catch (err) {
+      console.error("[chat/usage] Error:", err);
       res.status(500).json({ success: false, error: "Internal server error" });
     }
   }

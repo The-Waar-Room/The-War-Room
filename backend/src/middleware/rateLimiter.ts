@@ -75,7 +75,7 @@ export async function rateLimiter(
  * Looks up the user's active subscription for the given app.
  * Returns "free" if no active subscription found.
  */
-async function getUserPlan(userId: string, appId: string): Promise<PlanType> {
+export async function getUserPlan(userId: string, appId: string): Promise<PlanType> {
   const db = getFirestore();
   const now = new Date();
 
@@ -133,7 +133,7 @@ function toDate(value: unknown): Date | null {
 }
 
 /** Returns today's date string in IST (UTC+5:30) as YYYY-MM-DD */
-function getTodayIST(): string {
+export function getTodayIST(): string {
   const now = new Date();
   // IST offset: +5:30 = +330 minutes
   const istOffset = 330 * 60 * 1000;
