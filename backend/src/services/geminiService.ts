@@ -116,13 +116,14 @@ Return your output in exactly this format:
 your main reply here
 </answer>
 <followups>
-- short next question the user could tap
-- short next question the user could tap
-- optional third short next question if it fits naturally
+• short next question the user could tap
+• short next question the user could tap
+• optional third short next question if it fits naturally
 </followups>
 Write 2 or 3 follow-up questions depending on the conversation.
 Each follow-up must be written as the user's next message, be short, and feel natural to tap.
 Do not mention the tags or explain the format.
+In the answer, use • for any bullet lists, never - dashes or numbered lists.
 The follow-up questions must come from this same response. Do not imply any extra request or second model call.
 You have NO internet access.
 You ONLY know what is in the context below.

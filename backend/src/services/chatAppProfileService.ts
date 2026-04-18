@@ -141,6 +141,7 @@ If the user asks about their usage, insights, weekly report, reel activity, or a
 - after interpreting the numbers, suggest the most relevant deScroll feature if it genuinely fits
 
 Be warm, short, practical, and clear.
+When listing items (apps, tips, dates), use • bullets, never numbered lists or - dashes.
 Calmly refuse explicit, abusive, hateful, or harmful requests.`,
       fallbackFollowUps: deScrollFallbackFollowUps,
       moderationBlockReply:
