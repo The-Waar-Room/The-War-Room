@@ -773,8 +773,19 @@ export async function getCrashlyticsOverview(
   const bigQueryQueryProjectId =
     BIGQUERY_QUERY_PROJECT_ID ?? BIGQUERY_DATA_PROJECT_ID;
 
-  const crashTable = `\`${BIGQUERY_DATA_PROJECT_ID}.${CRASHLYTICS_DATASET}.${sanitizeBigQueryIdentifier(appConfig.packageName)}_ANDROID\``;
-  const sessionsTable = `\`${BIGQUERY_DATA_PROJECT_ID}.${SESSIONS_DATASET}.${sanitizeBigQueryIdentifier(appConfig.packageName)}_ANDROID\``;
+  const sanitizedPackage = sanitizeBigQueryIdentifier(appConfig.packageName);
+  const crashTable = `\`${BIGQUERY_DATA_PROJECT_ID}.${CRASHLYTICS_DATASET}.${sanitizedPackage}_ANDROID\``;
+  const sessionsTable = `\`${BIGQUERY_DATA_PROJECT_ID}.${SESSIONS_DATASET}.${sanitizedPackage}_ANDROID\``;
+
+  async function safeQuery(
+    query: string
+  ): Promise<Record<string, string | null>[] | null> {
+    try {
+      return await queryBigQuery(bigQueryQueryProjectId, query);
+    } catch {
+      return null;
+    }
+  }
 
   try {
     const [
@@ -784,159 +795,214 @@ export async function getCrashlyticsOverview(
       topIssueRows,
       cfuRows,
     ] = await Promise.all([
-      queryBigQuery(
-        bigQueryQueryProjectId,
-        `
-            SELECT
-              COUNT(DISTINCT IF(error_type = 'FATAL', event_id, NULL)) AS fatal_crashes,
-              COUNT(DISTINCT IF(error_type != 'FATAL', issue_id, NULL)) AS non_fatal_issues
-            FROM ${crashTable}
-            WHERE event_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 28 DAY)
-          `
-      ),
-      queryBigQuery(
-        bigQueryQueryProjectId,
-        `
-            SELECT application.display_version AS version, COUNT(DISTINCT event_id) AS crash_events
-            FROM ${crashTable}
-            WHERE event_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 28 DAY)
-            GROUP BY version
-            ORDER BY crash_events DESC
-            LIMIT 1
-          `
-      ),
-      queryBigQuery(
-        bigQueryQueryProjectId,
-        `
-            SELECT device.model AS device_model, COUNT(DISTINCT event_id) AS crash_events
-            FROM ${crashTable}
-            WHERE event_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 28 DAY)
-            GROUP BY device_model
-            ORDER BY crash_events DESC
-            LIMIT 1
-          `
-      ),
-      queryBigQuery(
-        bigQueryQueryProjectId,
-        `
-            SELECT issue_id, COUNT(DISTINCT event_id) AS crash_events
-            FROM ${crashTable}
-            WHERE event_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 28 DAY)
-            GROUP BY issue_id
-            ORDER BY crash_events DESC
-            LIMIT 1
-          `
-      ),
-      queryBigQuery(
-        bigQueryQueryProjectId,
-        `
-            WITH sessions AS (
-              SELECT DISTINCT instance_id
-              FROM ${sessionsTable}
-              WHERE event_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 28 DAY)
-            ),
-            fatals AS (
-              SELECT DISTINCT installation_uuid
-              FROM ${crashTable}
-              WHERE event_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 28 DAY)
-                AND error_type = 'FATAL'
-            )
-            SELECT SAFE_MULTIPLY(
-              100,
-              1 - SAFE_DIVIDE((SELECT COUNT(*) FROM fatals), (SELECT COUNT(*) FROM sessions))
-            ) AS crash_free_users_pct
-          `
-      ),
+      safeQuery(`
+        SELECT
+          COUNT(DISTINCT IF(error_type = 'FATAL', event_id, NULL)) AS fatal_crashes,
+          COUNT(DISTINCT IF(error_type != 'FATAL', issue_id, NULL)) AS non_fatal_issues
+        FROM ${crashTable}
+        WHERE event_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 28 DAY)
+      `),
+      safeQuery(`
+        SELECT application.display_version AS version, COUNT(DISTINCT event_id) AS crash_events
+        FROM ${crashTable}
+        WHERE event_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 28 DAY)
+        GROUP BY version
+        ORDER BY crash_events DESC
+        LIMIT 1
+      `),
+      safeQuery(`
+        SELECT device.model AS device_model, COUNT(DISTINCT event_id) AS crash_events
+        FROM ${crashTable}
+        WHERE event_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 28 DAY)
+        GROUP BY device_model
+        ORDER BY crash_events DESC
+        LIMIT 1
+      `),
+      safeQuery(`
+        SELECT issue_id, COUNT(DISTINCT event_id) AS crash_events
+        FROM ${crashTable}
+        WHERE event_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 28 DAY)
+        GROUP BY issue_id
+        ORDER BY crash_events DESC
+        LIMIT 1
+      `),
+      safeQuery(`
+        SELECT COUNT(DISTINCT instance_id) AS session_count
+        FROM ${sessionsTable}
+        WHERE event_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 28 DAY)
+      `),
     ]);
 
-    const crashSummary = crashSummaryRows[0] ?? {};
-    const topVersion = topVersionRows[0] ?? {};
-    const topDevice = topDeviceRows[0] ?? {};
-    const topIssue = topIssueRows[0] ?? {};
-    const crashFreeUsersPct = Number(cfuRows[0]?.crash_free_users_pct ?? 0);
+    const crashTableMissing = crashSummaryRows === null;
+    const sessionsTableMissing = cfuRows === null;
+
+    if (crashTableMissing && sessionsTableMissing) {
+      return buildEmptyOverview(
+        appId,
+        "Firebase Crashlytics via BigQuery",
+        `Both Crashlytics and Sessions export tables are missing for ${appConfig.label}. Enable Crashlytics BigQuery export (with Streaming) in Firebase Console, then trigger a crash to create the tables.`,
+        defaultCrashlyticsSummary(),
+        defaultHighlights,
+        buildHealth(
+          "action-required",
+          "Neither the Crashlytics nor Sessions export table exists in BigQuery yet.",
+          [
+            {
+              label: "Crashlytics table",
+              status: "error",
+              detail: `Table ${CRASHLYTICS_DATASET}.${sanitizedPackage}_ANDROID not found. Enable Crashlytics export with Streaming in Firebase Console.`,
+            },
+            {
+              label: "Sessions table",
+              status: "error",
+              detail: `Table ${SESSIONS_DATASET}.${sanitizedPackage}_ANDROID not found.`,
+            },
+          ],
+          crashlyticsDetectedValues
+        )
+      );
+    }
+
+    const crashSummary = crashSummaryRows?.[0] ?? {};
+    const topVersion = topVersionRows?.[0] ?? {};
+    const topDevice = topDeviceRows?.[0] ?? {};
+    const topIssue = topIssueRows?.[0] ?? {};
     const fatalCrashes = Number(crashSummary.fatal_crashes ?? 0);
     const nonFatalIssues = Number(crashSummary.non_fatal_issues ?? 0);
     const topVersionName = topVersion.version ?? "Unknown";
     const topVersionCrashes = Number(topVersion.crash_events ?? 0);
     const topDeviceName = topDevice.device_model ?? "Unknown";
     const topIssueId = topIssue.issue_id ?? null;
+    const sessionCount = Number(cfuRows?.[0]?.session_count ?? 0);
+    const crashFreeUsersPct =
+      !crashTableMissing && sessionCount > 0
+        ? 100 * (1 - fatalCrashes / sessionCount)
+        : null;
+
+    const healthChecks: IntegrationHealthCheck[] = [];
+
+    if (crashTableMissing) {
+      healthChecks.push({
+        label: "Crashlytics table",
+        status: "warning",
+        detail: `Table ${CRASHLYTICS_DATASET}.${sanitizedPackage}_ANDROID not found yet. Enable Streaming export in Firebase Console and trigger a crash to create it.`,
+      });
+    } else {
+      healthChecks.push({
+        label: "Crashlytics table",
+        status: "ok",
+        detail: `Reading from ${CRASHLYTICS_DATASET}.${sanitizedPackage}_ANDROID.`,
+      });
+    }
+
+    if (sessionsTableMissing) {
+      healthChecks.push({
+        label: "Sessions table",
+        status: "warning",
+        detail: `Table ${SESSIONS_DATASET}.${sanitizedPackage}_ANDROID not found.`,
+      });
+    } else {
+      healthChecks.push({
+        label: "Sessions table",
+        status: "ok",
+        detail: `Reading from ${SESSIONS_DATASET}.${sanitizedPackage}_ANDROID.`,
+      });
+    }
+
+    healthChecks.push({
+      label: "BigQuery query jobs",
+      status: "ok",
+      detail: `Query jobs are running in ${bigQueryQueryProjectId}.`,
+    });
+
+    const healthState =
+      crashTableMissing || sessionsTableMissing ? "action-required" : "ok";
+    const healthSummary = crashTableMissing
+      ? `Sessions data is available but the Crashlytics export table has not been created yet. Enable Streaming export and trigger a crash from the app.`
+      : "Crashlytics export tables and BigQuery query execution are both accessible.";
 
     return {
       appId,
-      configured: true,
+      configured: !crashTableMissing,
       source: "Firebase Crashlytics via BigQuery",
-      message: `Showing Crashlytics export data for ${appConfig.label} from the last 28 days.`,
+      message: crashTableMissing
+        ? `Sessions data found for ${appConfig.label}, but the Crashlytics crash table hasn't been exported to BigQuery yet. Enable Streaming in Firebase Console → Integrations → BigQuery → Crashlytics, then trigger a crash.`
+        : `Showing Crashlytics export data for ${appConfig.label} from the last 28 days.`,
       summary: [
         {
           label: "Crash-free users",
-          value: formatPercent(crashFreeUsersPct),
-          note: "Computed from Crashlytics and Firebase Sessions exports",
+          value:
+            crashFreeUsersPct !== null
+              ? formatPercent(crashFreeUsersPct)
+              : null,
+          note: crashTableMissing
+            ? "Waiting for Crashlytics export table"
+            : "Computed from Crashlytics and Firebase Sessions exports",
         },
         {
           label: "Fatal crashes",
-          value: formatWholeNumber(fatalCrashes),
-          note: "Distinct fatal crash events in range",
+          value: crashTableMissing ? null : formatWholeNumber(fatalCrashes),
+          note: crashTableMissing
+            ? "Waiting for Crashlytics export table"
+            : "Distinct fatal crash events in range",
         },
         {
           label: "Non-fatal issues",
-          value: formatWholeNumber(nonFatalIssues),
-          note: "Distinct non-fatal and ANR issue IDs in range",
+          value: crashTableMissing ? null : formatWholeNumber(nonFatalIssues),
+          note: crashTableMissing
+            ? "Waiting for Crashlytics export table"
+            : "Distinct non-fatal and ANR issue IDs in range",
         },
         {
           label: "Top affected version",
-          value: topVersionName,
-          note: `${formatCompactNumber(topVersionCrashes)} crash events`,
+          value: crashTableMissing ? null : topVersionName,
+          note: crashTableMissing
+            ? "Waiting for Crashlytics export table"
+            : `${formatCompactNumber(topVersionCrashes)} crash events`,
         },
       ],
-      highlights: [
-        topDeviceName !== "Unknown"
-          ? `Top crash device: ${topDeviceName}`
-          : "Issues by device model",
-        topIssueId ? `Top issue: ${topIssueId}` : "New and regressed issues",
-        `Fatal crashes: ${formatWholeNumber(fatalCrashes)}`,
-        `Non-fatal issues: ${formatWholeNumber(nonFatalIssues)}`,
-      ],
+      highlights: crashTableMissing
+        ? defaultHighlights
+        : [
+            topDeviceName !== "Unknown"
+              ? `Top crash device: ${topDeviceName}`
+              : "Issues by device model",
+            topIssueId
+              ? `Top issue: ${topIssueId}`
+              : "New and regressed issues",
+            `Fatal crashes: ${formatWholeNumber(fatalCrashes)}`,
+            `Non-fatal issues: ${formatWholeNumber(nonFatalIssues)}`,
+          ],
       health: buildHealth(
-        "ok",
-        "Crashlytics export tables and BigQuery query execution are both accessible.",
-        [
-          {
-            label: "BigQuery query jobs",
-            status: "ok",
-            detail: `Query jobs are running in ${bigQueryQueryProjectId}.`,
-          },
-          {
-            label: "Crashlytics export datasets",
-            status: "ok",
-            detail: `Reading ${CRASHLYTICS_DATASET} and ${SESSIONS_DATASET} in ${BIGQUERY_DATA_PROJECT_ID}.`,
-          },
-        ],
+        healthState,
+        healthSummary,
+        healthChecks,
         crashlyticsDetectedValues
       ),
     };
   } catch (error) {
     const { message } = parseGoogleApiError(error);
 
+    const isJobsError =
+      message.includes("bigquery.jobs.create") ||
+      message.includes("Access Denied");
+
     const crashlyticsHealth = buildHealth(
       "action-required",
-      message.includes("bigquery.jobs.create")
+      isJobsError
         ? "Crashlytics data export tables may exist, but the credentials cannot create BigQuery query jobs in the selected query project."
         : "Crashlytics access is partially configured, but one of the required BigQuery permissions or datasets is still missing.",
       [
         {
           label: "BigQuery query jobs",
-          status: message.includes("bigquery.jobs.create")
-            ? "error"
-            : "warning",
-          detail: message.includes("bigquery.jobs.create")
+          status: isJobsError ? "error" : "warning",
+          detail: isJobsError
             ? `Grant BigQuery Job User on ${bigQueryQueryProjectId}, or point CRASHLYTICS_BIGQUERY_QUERY_PROJECT_ID at a project where this service account can create jobs.`
             : message,
         },
         {
           label: "Crashlytics export datasets",
-          status: message.includes("bigquery.jobs.create")
-            ? "warning"
-            : "error",
+          status: isJobsError ? "warning" : "error",
           detail: `Expected datasets: ${CRASHLYTICS_DATASET} and ${SESSIONS_DATASET} in ${BIGQUERY_DATA_PROJECT_ID}.`,
         },
       ],
