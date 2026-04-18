@@ -32,6 +32,10 @@ function ts(seconds?: number) {
   });
 }
 
+function normalize(value: string) {
+  return value.trim().toLowerCase();
+}
+
 export default function UsersPage() {
   const { selectedApp } = useSelectedApp();
   const [offset, setOffset] = useState(0);
@@ -43,12 +47,24 @@ export default function UsersPage() {
     total: number;
   }>(`/api/admin/users?limit=${PAGE_SIZE}&offset=${offset}${appParam}`, 30000);
 
-  const filtered = data?.users?.filter(
-    (u) =>
-      !search ||
-      u.email?.toLowerCase().includes(search.toLowerCase()) ||
-      u.uid?.toLowerCase().includes(search.toLowerCase())
-  );
+  const searchTerm = normalize(search);
+
+  const filtered = data?.users?.filter((user) => {
+    if (!searchTerm) return true;
+
+    const searchableValues = [
+      user.email || "",
+      user.uid || "",
+      user.app_id || "",
+      user.is_banned ? "banned" : "active",
+      ts(user.created_at?._seconds),
+      ts(user.last_seen?._seconds),
+    ];
+
+    return searchableValues.some((value) =>
+      normalize(value).includes(searchTerm)
+    );
+  });
 
   return (
     <section className="space-y-5">
@@ -60,7 +76,7 @@ export default function UsersPage() {
       </div>
 
       <Input
-        placeholder="Filter by email or UID…"
+        placeholder="Filter by email, UID, app, status, joined, or last seen…"
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         className="max-w-sm"
