@@ -132,7 +132,7 @@ export default function SupportTicketsPage() {
       <Card>
         <CardContent className="flex flex-col gap-3 p-5 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-xl font-bold md:text-2xl">Support Messages</h1>
+            <h1 className="text-xl font-bold md:text-2xl">Support Tickets</h1>
             <p className="mt-0.5 text-xs text-muted-foreground">
               {data
                 ? `${data.total} total tickets`
@@ -303,7 +303,7 @@ export default function SupportTicketsPage() {
                     <TableCell className="space-x-2">
                       <Link
                         href={getAdminAppHref(
-                          `/support-messages/${ticket.ticket_id}`,
+                          `/support-tickets/${ticket.ticket_id}`,
                           selectedApp
                         )}
                       >
@@ -315,7 +315,7 @@ export default function SupportTicketsPage() {
                         ticket.status === "waiting_for_support") && (
                         <Link
                           href={getAdminAppHref(
-                            `/support-messages/${ticket.ticket_id}`,
+                            `/support-tickets/${ticket.ticket_id}`,
                             selectedApp
                           )}
                         >

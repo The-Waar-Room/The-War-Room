@@ -367,21 +367,21 @@ export default function DashboardClient() {
       <Card className="border-[#B2CCFF] bg-gradient-to-r from-[#EEF4FF] via-[#F8FAFF] to-white">
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-semibold text-[#0F172A]">
-            Support Messages Panel
+            Support Tickets
           </CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <p className="text-xs text-[#475467]">
-            Check Firestore support conversations, review pending customer
-            issues, and reply directly as owner from one place.
+            Review the support queue, inspect customer conversations, and send
+            owner replies from one place.
           </p>
           <Link
-            href={getAdminAppHref("/support-messages", selectedApp)}
+            href={getAdminAppHref("/support-tickets", selectedApp)}
             className="inline-flex"
           >
             <Button size="sm" className="gap-1.5 text-xs">
               <MessageSquare className="h-3.5 w-3.5" />
-              Open Support Messages
+              Open Support Tickets
             </Button>
           </Link>
         </CardContent>

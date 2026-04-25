@@ -147,7 +147,7 @@ export default function TicketDetailPage({
   if (error || !ticket) {
     return (
       <section className="space-y-4">
-        <Link href={getAdminAppHref("/support-messages", selectedApp)}>
+        <Link href={getAdminAppHref("/support-tickets", selectedApp)}>
           <Button variant="ghost" size="sm" className="gap-1">
             <ArrowLeft className="h-4 w-4" /> Back
           </Button>
@@ -163,7 +163,7 @@ export default function TicketDetailPage({
     <section className="space-y-5">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <Link href={getAdminAppHref("/support-messages", selectedApp)}>
+        <Link href={getAdminAppHref("/support-tickets", selectedApp)}>
           <Button variant="ghost" size="sm" className="gap-1">
             <ArrowLeft className="h-4 w-4" /> Back
           </Button>

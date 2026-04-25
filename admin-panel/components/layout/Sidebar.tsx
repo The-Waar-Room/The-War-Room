@@ -11,7 +11,6 @@ import {
   Cloud,
   Settings,
   Bell,
-  MessageSquare,
   LifeBuoy,
   LogOut,
   BarChart3,
@@ -43,7 +42,6 @@ const navSections: Array<{ title: string; items: NavItem[] }> = [
     items: [
       { href: "/", label: "Dashboard", icon: LayoutDashboard },
       { href: "/users", label: "Accounts", icon: Users },
-      { href: "/support-messages", label: "Messages", icon: MessageSquare },
     ],
   },
   {
@@ -77,7 +75,6 @@ const navSections: Array<{ title: string; items: NavItem[] }> = [
 const mobileItems: NavItem[] = [
   { href: "/", label: "Home", icon: LayoutDashboard },
   { href: "/users", label: "Accounts", icon: Users },
-  { href: "/support-messages", label: "Messages", icon: MessageSquare },
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
