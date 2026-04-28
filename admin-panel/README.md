@@ -34,3 +34,20 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/deployment) for more details.
+
+## Public Legal Pages
+
+This app exposes public legal routes that do not require admin login:
+
+- `/legal`
+- `/privacy-policy`
+- `/terms-and-conditions`
+
+After deploying to Vercel, the Android app should point to:
+
+```text
+https://your-vercel-domain/privacy-policy
+https://your-vercel-domain/terms-and-conditions
+```
+
+Update `deScroll/app/src/main/java/com/sudoajay/descroll/Constants.kt` so `LEGAL_BASE_URL` matches the final Vercel hostname.

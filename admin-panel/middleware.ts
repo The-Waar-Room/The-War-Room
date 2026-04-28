@@ -5,7 +5,13 @@ import { getToken } from "next-auth/jwt";
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  const publicPaths = ["/login", "/access-denied"];
+  const publicPaths = [
+    "/login",
+    "/access-denied",
+    "/legal",
+    "/privacy-policy",
+    "/terms-and-conditions",
+  ];
   const isPublic =
     publicPaths.includes(pathname) ||
     pathname.startsWith("/api/auth") ||
