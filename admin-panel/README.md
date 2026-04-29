@@ -39,15 +39,15 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/deploym
 
 This app exposes public legal routes that do not require admin login:
 
-- `/legal`
-- `/privacy-policy`
-- `/terms-and-conditions`
+- `/descroll/legal`
+- `/descroll/privacy-policy`
+- `/descroll/terms-and-conditions`
 
 After deploying to Vercel, the Android app should point to:
 
 ```text
-https://your-vercel-domain/privacy-policy
-https://your-vercel-domain/terms-and-conditions
+https://your-vercel-domain/descroll/privacy-policy
+https://your-vercel-domain/descroll/terms-and-conditions
 ```
 
 Update `deScroll/app/src/main/java/com/sudoajay/descroll/Constants.kt` so `LEGAL_BASE_URL` matches the final Vercel hostname.

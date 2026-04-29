@@ -11,6 +11,9 @@ export async function middleware(request: NextRequest) {
     "/legal",
     "/privacy-policy",
     "/terms-and-conditions",
+    "/descroll/legal",
+    "/descroll/privacy-policy",
+    "/descroll/terms-and-conditions",
   ];
   const isPublic =
     publicPaths.includes(pathname) ||

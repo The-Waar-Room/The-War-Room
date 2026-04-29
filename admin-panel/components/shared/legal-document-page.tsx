@@ -68,19 +68,19 @@ export default function LegalDocumentPage({
 
         <div className="flex flex-wrap items-center gap-3 text-sm text-slate-600">
           <Link
-            href="/legal"
+            href="/descroll/legal"
             className="rounded-full border border-slate-300 bg-white px-4 py-2 font-medium text-slate-900 transition hover:border-slate-400 hover:bg-slate-50"
           >
             Legal hub
           </Link>
           <Link
-            href="/privacy-policy"
+            href="/descroll/privacy-policy"
             className="rounded-full border border-slate-300 bg-white px-4 py-2 font-medium text-slate-900 transition hover:border-slate-400 hover:bg-slate-50"
           >
             Privacy policy
           </Link>
           <Link
-            href="/terms-and-conditions"
+            href="/descroll/terms-and-conditions"
             className="rounded-full border border-slate-300 bg-white px-4 py-2 font-medium text-slate-900 transition hover:border-slate-400 hover:bg-slate-50"
           >
             Terms and conditions

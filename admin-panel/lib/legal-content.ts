@@ -40,6 +40,30 @@ export const legalDocuments: Record<"privacy" | "terms", LegalDocument> = {
         ],
       },
       {
+        heading: "Accessibility Service Permission",
+        paragraphs: [
+          "deScroll requests Android Accessibility Service access only for features that require on-device detection of foreground app activity and rule enforcement.",
+          "This permission is used in features such as Focus Enhancer, App Shield, Usage Guardian, Reels usage controls, and Advanced Insights usage tracking. It allows deScroll to detect the currently opened app or supported content surfaces so the app can block selected apps, enforce cooldowns, show warning screens, and track usage for the categories you enable.",
+          "Accessibility data is used to power the protection and tracking features you explicitly turn on. You can disable this access at any time in Android accessibility settings, but those related features will stop functioning until the permission is restored.",
+        ],
+      },
+      {
+        heading: "Foreground Service Special Use Permission",
+        paragraphs: [
+          "deScroll uses a special-use foreground service for its persistent floating overlay and timer experience.",
+          "This foreground service supports the on-screen floating timer, countdown overlay, focus controls, quick pause or resume actions, and related ongoing notification controls while focus sessions or overlay-based experiences are active.",
+          "The permission is not used to access unrelated background data. It is used so Android can keep the overlay and its controls running visibly and reliably while the feature is active.",
+        ],
+      },
+      {
+        heading: "Query All Packages Permission",
+        paragraphs: [
+          "deScroll requests package visibility access so it can identify installed apps on your device where that is necessary for launcher and blocking functionality.",
+          "This access is used to build the app list shown in screens such as the launcher app list, favorites, app selection dialogs, hidden-app management, notification history labeling, usage views, icon-pack support, and app-blocking configuration screens. It allows deScroll to display app names, icons, launch targets, and package associations for the apps you manage inside the product.",
+          "deScroll uses this permission to support user-facing device-management features and not to sell lists of installed apps. If this visibility is restricted, app discovery, icon mapping, usage labeling, and blocking setup may be incomplete or unavailable.",
+        ],
+      },
+      {
         heading: "How We Use Information",
         paragraphs: [
           "We use information to operate, secure, improve, and support deScroll.",
@@ -116,6 +140,18 @@ export const legalDocuments: Record<"privacy" | "terms", LegalDocument> = {
           "Do not misuse, disrupt, reverse engineer, or attempt unauthorized access to the service.",
           "Do not use deScroll in a way that violates the rights of others or applicable law.",
           "Use device permissions responsibly and only on devices or accounts you are authorized to manage.",
+        ],
+      },
+      {
+        heading: "Permission-Specific Terms",
+        paragraphs: [
+          "Some deScroll features require elevated Android permissions so the app can perform the device-management tasks you request.",
+        ],
+        bullets: [
+          "Accessibility Service access is used for features such as Focus Enhancer, App Shield, Usage Guardian, and usage tracking flows that need to detect foreground apps, show warning screens, or enforce selected rules on device.",
+          "Foreground service special-use access is used for the floating timer, countdown overlay, persistent focus controls, and related visible overlay interactions while those features are active.",
+          "Query all packages access is used to discover installed apps, render launcher and settings app lists, support app-blocking setup, label usage and notification entries, and resolve icon packs or launch targets.",
+          "If you revoke these permissions, related features may stop working, display incomplete data, or become unavailable until access is restored.",
         ],
       },
       {
