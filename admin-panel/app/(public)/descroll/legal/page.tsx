@@ -1,9 +1,11 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 
+import { legalDocuments, legalLinks } from "@/lib/legal-content";
+
 export const metadata: Metadata = {
   title: "deScroll Legal",
-  description: "Public legal pages for deScroll hosted by the admin panel.",
+  description: "Public legal pages for deScroll.",
 };
 
 const legalCards = [
@@ -11,45 +13,54 @@ const legalCards = [
     href: "/descroll/privacy-policy",
     title: "Privacy Policy",
     description:
-      "Explains what information deScroll may process, why it is used, and the choices available to users.",
+      "How deScroll handles device activity, permissions, accounts, support, subscriptions, and optional cloud features.",
+    lastUpdated: legalDocuments.privacy.lastUpdated,
   },
   {
     href: "/descroll/terms-and-conditions",
     title: "Terms and Conditions",
     description:
-      "Covers acceptable use, subscriptions, billing, intellectual property, and service limitations.",
+      "The rules for using deScroll, including permissions, subscriptions, AI Helper, support, and acceptable use.",
+    lastUpdated: legalDocuments.terms.lastUpdated,
   },
 ];
 
 export default function DeScrollLegalHubPage() {
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(14,165,233,0.12),_transparent_30%),linear-gradient(180deg,#f8fafc_0%,#eef2ff_100%)] px-4 py-10 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-5xl rounded-[36px] border border-white/70 bg-white/90 p-8 shadow-[0_20px_80px_rgba(15,23,42,0.08)] backdrop-blur sm:p-10 lg:p-14">
+    <main className="min-h-screen bg-slate-50 px-4 py-10 text-slate-900 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-5xl">
         <div className="max-w-3xl">
-          <p className="text-sm font-semibold uppercase tracking-[0.24em] text-sky-700">
+          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-sky-700">
             deScroll public pages
           </p>
           <h1 className="mt-4 text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">
-            deScroll legal documents for your Vercel deployment
+            deScroll legal center
           </h1>
           <p className="mt-5 text-base leading-7 text-slate-600 sm:text-lg">
-            Deploy this admin-panel app to Vercel and use the generated
-            deScroll-specific URLs in the Android app. After deployment, the
-            final links will follow the pattern shown below.
+            deScroll is designed so core focus, launcher, blocking, and usage
+            features run on your device. Optional cloud features, such as AI
+            Helper, support, subscriptions, diagnostics, and weather, process
+            only the data needed to provide those services.
           </p>
         </div>
 
-        <div className="mt-8 grid gap-4 rounded-[28px] border border-slate-200 bg-slate-50/80 p-6 text-sm text-slate-700 sm:grid-cols-2">
-          <div className="rounded-2xl border border-slate-200 bg-white p-4">
-            <p className="font-semibold text-slate-950">deScroll privacy URL</p>
+        <div className="mt-8 grid gap-4 rounded-lg border border-slate-200 bg-white p-5 text-sm text-slate-700 sm:grid-cols-3">
+          <div>
+            <p className="font-semibold text-slate-950">Legal hub</p>
             <p className="mt-2 break-all font-mono text-[13px] text-slate-600">
-              https://your-vercel-domain/descroll/privacy-policy
+              {legalLinks.hub}
             </p>
           </div>
-          <div className="rounded-2xl border border-slate-200 bg-white p-4">
-            <p className="font-semibold text-slate-950">deScroll terms URL</p>
+          <div>
+            <p className="font-semibold text-slate-950">Privacy policy</p>
             <p className="mt-2 break-all font-mono text-[13px] text-slate-600">
-              https://your-vercel-domain/descroll/terms-and-conditions
+              {legalLinks.privacy}
+            </p>
+          </div>
+          <div>
+            <p className="font-semibold text-slate-950">Terms</p>
+            <p className="mt-2 break-all font-mono text-[13px] text-slate-600">
+              {legalLinks.terms}
             </p>
           </div>
         </div>
@@ -59,10 +70,10 @@ export default function DeScrollLegalHubPage() {
             <Link
               key={card.href}
               href={card.href}
-              className="group rounded-[28px] border border-slate-200 bg-white p-6 transition hover:-translate-y-0.5 hover:border-sky-300 hover:shadow-[0_18px_50px_rgba(14,165,233,0.12)]"
+              className="group rounded-lg border border-slate-200 bg-white p-6 transition hover:-translate-y-0.5 hover:border-sky-300 hover:shadow-[0_18px_50px_rgba(14,165,233,0.12)]"
             >
-              <p className="text-sm font-semibold uppercase tracking-[0.2em] text-sky-700">
-                deScroll route
+              <p className="text-sm font-semibold uppercase tracking-[0.16em] text-sky-700">
+                Last updated {card.lastUpdated}
               </p>
               <h2 className="mt-3 text-2xl font-semibold tracking-tight text-slate-950">
                 {card.title}

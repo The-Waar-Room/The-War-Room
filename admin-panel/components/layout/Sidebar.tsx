@@ -16,6 +16,7 @@ import {
   BarChart3,
   ShieldAlert,
   History,
+  FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSelectedApp } from "@/hooks/useSelectedApp";
@@ -68,7 +69,10 @@ const navSections: Array<{ title: string; items: NavItem[] }> = [
   },
   {
     title: "General",
-    items: [{ href: "/settings", label: "Settings", icon: Settings }],
+    items: [
+      { href: "/legal-pages", label: "Legal Pages", icon: FileText },
+      { href: "/settings", label: "Settings", icon: Settings },
+    ],
   },
 ];
 
@@ -76,6 +80,7 @@ const mobileItems: NavItem[] = [
   { href: "/", label: "Home", icon: LayoutDashboard },
   { href: "/users", label: "Accounts", icon: Users },
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
+  { href: "/legal-pages", label: "Legal", icon: FileText },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
