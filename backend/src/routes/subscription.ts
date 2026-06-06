@@ -237,7 +237,8 @@ async function linkSubscription(req: AuthenticatedRequest, res: Response): Promi
     if (err instanceof PurchaseVerificationError) {
       const purchaseTokenForLog =
         typeof req.body?.purchaseToken === "string" ? req.body.purchaseToken : undefined;
-      const productIdForLog = typeof req.body?.productId === "string" ? req.body.productId : undefined;
+      const productIdForLog =
+        typeof req.body?.productId === "string" ? req.body.productId : undefined;
       const packageNameForLog =
         typeof req.body?.packageName === "string" ? req.body.packageName : undefined;
 

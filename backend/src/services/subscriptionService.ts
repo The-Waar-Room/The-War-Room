@@ -249,18 +249,19 @@ async function fetchGooglePlaySubscriptionSnapshot(
   } catch (error) {
     if (error instanceof PurchaseVerificationError) throw error;
     const responseStatus = (error as { response?: { status?: number } }).response?.status;
-    if (responseStatus === 400 || responseStatus === 401 || responseStatus === 403 || responseStatus === 404) {
+    if (
+      responseStatus === 400 ||
+      responseStatus === 401 ||
+      responseStatus === 403 ||
+      responseStatus === 404
+    ) {
       const reason =
         responseStatus === 404
           ? "purchase_not_found"
           : responseStatus === 401 || responseStatus === 403
             ? "google_api_permission_denied"
             : "google_rejected_purchase";
-      throw new PurchaseVerificationError(
-        describeGooglePlayError(error),
-        reason,
-        responseStatus
-      );
+      throw new PurchaseVerificationError(describeGooglePlayError(error), reason, responseStatus);
     }
     throw error;
   }
