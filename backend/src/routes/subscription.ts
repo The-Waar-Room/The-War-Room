@@ -235,6 +235,30 @@ async function linkSubscription(req: AuthenticatedRequest, res: Response): Promi
       return;
     }
     if (err instanceof PurchaseVerificationError) {
+      const purchaseTokenForLog =
+        typeof req.body?.purchaseToken === "string" ? req.body.purchaseToken : undefined;
+      const productIdForLog = typeof req.body?.productId === "string" ? req.body.productId : undefined;
+      const packageNameForLog =
+        typeof req.body?.packageName === "string" ? req.body.packageName : undefined;
+
+      if (req.decodedToken?.uid && req.appId) {
+        await logSubscriptionEvent({
+          userId: req.decodedToken.uid,
+          appId: req.appId,
+          eventType: "verify_failed",
+          eventSource: "backend_verify",
+          productId: productIdForLog,
+          purchaseToken: purchaseTokenForLog,
+          newStatus: "unknown",
+          metadata: {
+            reason: err.reason,
+            upstream_status: err.upstreamStatus ?? null,
+            message: err.message,
+            package_name: packageNameForLog ?? null,
+          },
+        });
+      }
+
       console.warn(
         JSON.stringify({
           event: "subscription_link_rejected",
@@ -243,18 +267,17 @@ async function linkSubscription(req: AuthenticatedRequest, res: Response): Promi
           message: err.message,
           appId: req.appId ?? null,
           uid: req.decodedToken?.uid ?? null,
-          productId: req.body?.productId ?? null,
-          packageName: req.body?.packageName ?? null,
-          purchaseTokenHash:
-            typeof req.body?.purchaseToken === "string"
-              ? hashPurchaseToken(req.body.purchaseToken)
-              : null,
+          productId: productIdForLog ?? null,
+          packageName: packageNameForLog ?? null,
+          purchaseTokenHash: purchaseTokenForLog ? hashPurchaseToken(purchaseTokenForLog) : null,
         })
       );
       res.status(400).json({
         success: false,
         error: "purchase_verification_failed",
         verificationReason: err.reason,
+        upstreamStatus: err.upstreamStatus ?? null,
+        verificationMessage: err.message,
       });
       return;
     }
