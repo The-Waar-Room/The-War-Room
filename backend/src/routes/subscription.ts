@@ -7,6 +7,7 @@ import {
   reconcileSubscriptionFromGoogle,
   verifyGooglePlaySubscription,
   getActiveSubscription,
+  hashPurchaseToken,
   PurchaseOwnershipConflictError,
   PurchaseVerificationError,
 } from "../services/subscriptionService";
@@ -162,6 +163,18 @@ async function linkSubscription(req: AuthenticatedRequest, res: Response): Promi
     }
     const userId = req.decodedToken!.uid;
     const appId = req.appId!;
+    const purchaseTokenHash = hashPurchaseToken(purchaseToken);
+
+    console.log(
+      JSON.stringify({
+        event: "subscription_link_started",
+        appId,
+        uid: userId,
+        productId,
+        packageName,
+        purchaseTokenHash,
+      })
+    );
 
     const result = await verifyGooglePlaySubscription(
       userId,
@@ -169,6 +182,22 @@ async function linkSubscription(req: AuthenticatedRequest, res: Response): Promi
       purchaseToken,
       productId,
       packageName
+    );
+
+    console.log(
+      JSON.stringify({
+        event: "subscription_link_success",
+        appId,
+        uid: userId,
+        productId: result.productId,
+        packageName,
+        purchaseTokenHash,
+        linkStatus: result.linkStatus,
+        entitlementStatus: result.entitlementStatus,
+        planType: result.planType,
+        basePlanId: result.basePlanId,
+        expiresAt: result.expiresAt.toISOString(),
+      })
     );
 
     res.json({
@@ -185,6 +214,19 @@ async function linkSubscription(req: AuthenticatedRequest, res: Response): Promi
     });
   } catch (err) {
     if (err instanceof PurchaseOwnershipConflictError) {
+      console.warn(
+        JSON.stringify({
+          event: "subscription_link_conflict",
+          appId: req.appId ?? null,
+          uid: req.decodedToken?.uid ?? null,
+          productId: req.body?.productId ?? null,
+          packageName: req.body?.packageName ?? null,
+          purchaseTokenHash:
+            typeof req.body?.purchaseToken === "string"
+              ? hashPurchaseToken(req.body.purchaseToken)
+              : null,
+        })
+      );
       res.status(409).json({
         success: false,
         error: "purchase_linked_to_another_account",
@@ -201,6 +243,12 @@ async function linkSubscription(req: AuthenticatedRequest, res: Response): Promi
           message: err.message,
           appId: req.appId ?? null,
           uid: req.decodedToken?.uid ?? null,
+          productId: req.body?.productId ?? null,
+          packageName: req.body?.packageName ?? null,
+          purchaseTokenHash:
+            typeof req.body?.purchaseToken === "string"
+              ? hashPurchaseToken(req.body.purchaseToken)
+              : null,
         })
       );
       res.status(400).json({
