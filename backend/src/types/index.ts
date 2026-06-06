@@ -21,17 +21,34 @@ export interface UserDoc {
 }
 
 export interface SubscriptionDoc {
-  user_id: string;
+  user_id: string | null;
   app_id: string;
   plan_type: PlanType;
   purchase_token: string;
+  purchase_token_hash?: string;
+  package_name?: string;
   product_id: string;
-  status: "active" | "expired" | "cancelled";
-  starts_at: FirebaseFirestore.Timestamp;
-  expires_at: FirebaseFirestore.Timestamp;
-  verified_at: FirebaseFirestore.Timestamp;
+  base_plan_id?: string;
+  status: SubscriptionStatus;
+  google_subscription_state?: string;
+  latest_order_id?: string;
+  starts_at: FirebaseFirestore.Timestamp | Date;
+  expires_at: FirebaseFirestore.Timestamp | Date;
+  linked_at?: FirebaseFirestore.Timestamp | Date;
+  verified_at: FirebaseFirestore.Timestamp | Date;
+  last_verified_at?: FirebaseFirestore.Timestamp | Date;
   raw_google_response: Record<string, unknown>;
 }
+
+export type SubscriptionStatus =
+  | "active"
+  | "grace_period"
+  | "on_hold"
+  | "paused"
+  | "pending"
+  | "cancelled"
+  | "expired"
+  | "unknown";
 
 export type SubscriptionEventType =
   | "purchase_started"
@@ -144,7 +161,7 @@ export interface SubscriptionVerifyBody {
   purchaseToken: string;
   productId: string;
   packageName: string;
-  basePlanId: string;
+  basePlanId?: string;
   purchaseState?: number;
   orderId?: string;
   purchaseTimeMillis?: number;
@@ -202,7 +219,7 @@ export interface SubscriptionEventDoc {
   plan_type?: string;
   product_id?: string;
   base_plan_id?: string;
-  purchase_token?: string;
+  purchase_token_hash?: string;
   purchase_state?: number;
   order_id?: string;
   billing_response_code?: number;

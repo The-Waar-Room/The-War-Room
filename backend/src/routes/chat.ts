@@ -186,6 +186,7 @@ chatRouter.get(
       const redis = getRedis();
       let currentCount = 0;
       try {
+        if (!redis) throw new Error("Redis unavailable");
         currentCount = (await redis.get<number>(redisKey)) ?? 0;
       } catch {
         currentCount = 0;

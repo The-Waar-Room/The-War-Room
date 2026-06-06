@@ -7,6 +7,8 @@ import {
   reconcileSubscriptionFromGoogle,
   verifyGooglePlaySubscription,
   getActiveSubscription,
+  PurchaseOwnershipConflictError,
+  PurchaseVerificationError,
 } from "../services/subscriptionService";
 import { AuthenticatedRequest, SubscriptionEventBody, SubscriptionVerifyBody } from "../types";
 
@@ -142,70 +144,77 @@ subscriptionRouter.post("/reconcile", async (req, res: Response): Promise<void> 
   }
 });
 
-/**
- * POST /api/subscription/verify
- * Verify a Google Play purchase server-side.
- * Middleware: appVerify → authMiddleware
- */
-subscriptionRouter.post(
-  "/verify",
-  appVerify,
-  authMiddleware,
-  async (req: AuthenticatedRequest, res: Response): Promise<void> => {
-    try {
-      const { purchaseToken, productId, packageName, basePlanId } = req.body as SubscriptionVerifyBody;
+async function linkSubscription(req: AuthenticatedRequest, res: Response): Promise<void> {
+  try {
+    const { purchaseToken, productId, packageName } = req.body as SubscriptionVerifyBody;
 
-      // ── Input validation ──
-      if (!purchaseToken || typeof purchaseToken !== "string") {
-        res.status(400).json({ success: false, error: "purchaseToken is required" });
-        return;
-      }
-      if (!productId || typeof productId !== "string") {
-        res.status(400).json({ success: false, error: "productId is required" });
-        return;
-      }
-      if (!packageName || typeof packageName !== "string") {
-        res.status(400).json({ success: false, error: "packageName is required" });
-        return;
-      }
-      if (!basePlanId || typeof basePlanId !== "string") {
-        res.status(400).json({ success: false, error: "basePlanId is required" });
-        return;
-      }
-
-      const userId = req.decodedToken!.uid;
-      const appId = req.appId!;
-
-      const result = await verifyGooglePlaySubscription(
-        userId,
-        appId,
-        purchaseToken,
-        productId,
-        packageName,
-        basePlanId
-      );
-
-      if (!result.success) {
-        res.status(400).json({
-          success: false,
-          error: "Payment verification failed",
-          status: result.status,
-        });
-        return;
-      }
-
-      res.json({
-        success: true,
-        plan_type: result.plan_type,
-        expires_at: result.expires_at.toISOString(),
-        status: result.status,
-      });
-    } catch (err) {
-      console.error("[subscription/verify] Error:", err);
-      res.status(500).json({ success: false, error: "Internal server error" });
+    if (!purchaseToken || typeof purchaseToken !== "string") {
+      res.status(400).json({ success: false, error: "purchaseToken is required" });
+      return;
     }
+    if (!productId || typeof productId !== "string") {
+      res.status(400).json({ success: false, error: "productId is required" });
+      return;
+    }
+    if (!packageName || typeof packageName !== "string") {
+      res.status(400).json({ success: false, error: "packageName is required" });
+      return;
+    }
+    const userId = req.decodedToken!.uid;
+    const appId = req.appId!;
+
+    const result = await verifyGooglePlaySubscription(
+      userId,
+      appId,
+      purchaseToken,
+      productId,
+      packageName
+    );
+
+    res.json({
+      success: true,
+      linkStatus: result.linkStatus,
+      entitlementStatus: result.entitlementStatus,
+      planType: result.planType,
+      basePlanId: result.basePlanId,
+      expiresAt: result.expiresAt.toISOString(),
+      // Compatibility fields for app versions using /verify.
+      plan_type: result.planType,
+      expires_at: result.expiresAt.toISOString(),
+      status: result.entitlementStatus,
+    });
+  } catch (err) {
+    if (err instanceof PurchaseOwnershipConflictError) {
+      res.status(409).json({
+        success: false,
+        error: "purchase_linked_to_another_account",
+        linkStatus: "conflict",
+      });
+      return;
+    }
+    if (err instanceof PurchaseVerificationError) {
+      console.warn("[subscription/link] Purchase verification rejected:", err.message);
+      res.status(400).json({
+        success: false,
+        error: "purchase_verification_failed",
+      });
+      return;
+    }
+    console.error("[subscription/link] Error:", err);
+    res.status(500).json({ success: false, error: "Internal server error" });
   }
-);
+}
+
+/**
+ * POST /api/subscription/link
+ * Verifies a Play purchase and links it to the authenticated Firebase UID.
+ */
+subscriptionRouter.post("/link", appVerify, authMiddleware, linkSubscription);
+
+/**
+ * Compatibility endpoint for released clients. Client plan/payment fields are ignored.
+ */
+subscriptionRouter.post("/verify", appVerify, authMiddleware, linkSubscription);
 
 /**
  * POST /api/subscription/event
@@ -307,6 +316,7 @@ subscriptionRouter.get(
         plan_type: sub.plan_type,
         status: sub.status,
         product_id: sub.product_id,
+        base_plan_id: sub.base_plan_id,
         expires_at: sub.expires_at,
       });
     } catch (err) {

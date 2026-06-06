@@ -1,25 +1,36 @@
-import { google } from "googleapis";
+import { createHash } from "node:crypto";
+import { google, androidpublisher_v3 } from "googleapis";
+import { FieldValue } from "firebase-admin/firestore";
 import { getFirestore } from "../config/firebase";
 import {
   PRODUCT_TO_PLAN,
+  PlanType,
   SubscriptionDoc,
   SubscriptionEventSource,
   SubscriptionEventType,
+  SubscriptionStatus,
 } from "../types";
-import { FieldValue } from "firebase-admin/firestore";
 
 interface VerifyResult {
   success: boolean;
-  plan_type: string;
-  expires_at: Date;
-  status: string;
+  linkStatus: "linked" | "already_linked";
+  entitlementStatus: SubscriptionStatus;
+  planType: PlanType;
+  basePlanId: string;
+  productId: string;
+  expiresAt: Date;
 }
 
-interface SubscriptionSnapshot {
+export interface SubscriptionSnapshot {
   purchaseData: Record<string, unknown>;
+  startsAt: Date;
   expiresAt: Date;
-  status: "active" | "expired" | "cancelled";
-  planType: string;
+  status: SubscriptionStatus;
+  googleSubscriptionState: string;
+  planType: PlanType;
+  basePlanId: string;
+  productId: string;
+  latestOrderId?: string;
 }
 
 interface ReconcileSubscriptionInput {
@@ -38,93 +49,9 @@ interface ReconcileSubscriptionResult {
   appId: string;
   userId: string;
   productId: string;
-  status: "active" | "expired" | "cancelled";
+  status: SubscriptionStatus;
   previousStatus?: string;
   expiresAt: Date;
-}
-
-function getAndroidPublisher() {
-  const auth = new google.auth.GoogleAuth({
-    scopes: ["https://www.googleapis.com/auth/androidpublisher"],
-  });
-
-  return google.androidpublisher({ version: "v3", auth });
-}
-
-function mapPackageNameToAppId(packageName: string): string {
-  const normalized = packageName.trim().toLowerCase();
-  if (normalized === "com.sudoajay.descroll") return "deScroll";
-  if (normalized === "com.sudoajay.soullens") return "soullens";
-  return packageName;
-}
-
-function parseGoogleExpiry(rawValue: unknown): Date {
-  const millis = Number(rawValue ?? 0);
-  return Number.isFinite(millis) && millis > 0 ? new Date(millis) : new Date();
-}
-
-function deriveSubscriptionStatus(
-  purchaseData: Record<string, unknown>,
-  expiresAt: Date,
-  forcedStatus?: "active" | "expired" | "cancelled"
-): "active" | "expired" | "cancelled" {
-  if (forcedStatus) return forcedStatus;
-
-  const now = Date.now();
-  const cancelReason = Number(purchaseData.cancelReason ?? -1);
-
-  if (expiresAt.getTime() <= now) {
-    return "expired";
-  }
-
-  if (cancelReason === 1 || cancelReason === 2 || cancelReason === 3) {
-    return "cancelled";
-  }
-
-  return "active";
-}
-
-async function fetchGooglePlaySubscriptionSnapshot(
-  purchaseToken: string,
-  productId: string,
-  packageName: string,
-  forcedStatus?: "active" | "expired" | "cancelled"
-): Promise<SubscriptionSnapshot> {
-  const androidPublisher = getAndroidPublisher();
-
-  const response = await androidPublisher.purchases.subscriptions.get({
-    packageName,
-    subscriptionId: productId,
-    token: purchaseToken,
-  });
-
-  const purchaseData = response.data as Record<string, unknown>;
-  const expiresAt = parseGoogleExpiry(purchaseData.expiryTimeMillis);
-  const mapping = PRODUCT_TO_PLAN[productId];
-
-  return {
-    purchaseData,
-    expiresAt,
-    status: deriveSubscriptionStatus(purchaseData, expiresAt, forcedStatus),
-    planType: mapping?.plan ?? "free",
-  };
-}
-
-function mapTriggerEventToStatus(
-  eventType?: SubscriptionEventType
-): "active" | "expired" | "cancelled" | undefined {
-  switch (eventType) {
-    case "renewed":
-      return "active";
-    case "expired":
-      return "expired";
-    case "cancelled":
-    case "refunded":
-    case "revoked":
-      return "cancelled";
-    default:
-      return undefined;
-  }
 }
 
 interface LogSubscriptionEventInput {
@@ -144,6 +71,177 @@ interface LogSubscriptionEventInput {
   newStatus?: string;
   occurredAt?: Date;
   metadata?: Record<string, unknown>;
+}
+
+export class PurchaseOwnershipConflictError extends Error {
+  constructor() {
+    super("Purchase is already linked to another account");
+    this.name = "PurchaseOwnershipConflictError";
+  }
+}
+
+export class PurchaseVerificationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PurchaseVerificationError";
+  }
+}
+
+export function resolvePurchaseLinkStatus(
+  existingUserId: unknown,
+  requestedUserId: string
+): "linked" | "already_linked" {
+  if (
+    typeof existingUserId === "string" &&
+    existingUserId !== "unknown" &&
+    existingUserId !== requestedUserId
+  ) {
+    throw new PurchaseOwnershipConflictError();
+  }
+  return existingUserId === requestedUserId ? "already_linked" : "linked";
+}
+
+function getAndroidPublisher() {
+  const auth = new google.auth.GoogleAuth({
+    scopes: ["https://www.googleapis.com/auth/androidpublisher"],
+  });
+
+  return google.androidpublisher({ version: "v3", auth });
+}
+
+function mapPackageNameToAppId(packageName: string): string {
+  const normalized = packageName.trim().toLowerCase();
+  if (normalized === "com.sudoajay.descroll") return "deScroll";
+  if (normalized === "com.sudoajay.soullens") return "soullens";
+  return packageName;
+}
+
+export function hashPurchaseToken(purchaseToken: string): string {
+  return createHash("sha256").update(purchaseToken).digest("hex");
+}
+
+function subscriptionDocumentId(appId: string, purchaseToken: string): string {
+  return createHash("sha256").update(`${appId}:${purchaseToken}`).digest("hex");
+}
+
+function parseGoogleDate(rawValue: string | null | undefined, fallback = new Date()): Date {
+  if (!rawValue) return fallback;
+  const date = new Date(rawValue);
+  return Number.isNaN(date.getTime()) ? fallback : date;
+}
+
+export function normalizeSubscriptionStatus(
+  googleState: string | null | undefined
+): SubscriptionStatus {
+  switch (googleState) {
+    case "SUBSCRIPTION_STATE_ACTIVE":
+      return "active";
+    case "SUBSCRIPTION_STATE_IN_GRACE_PERIOD":
+      return "grace_period";
+    case "SUBSCRIPTION_STATE_ON_HOLD":
+      return "on_hold";
+    case "SUBSCRIPTION_STATE_PAUSED":
+      return "paused";
+    case "SUBSCRIPTION_STATE_PENDING":
+    case "SUBSCRIPTION_STATE_PENDING_PURCHASE_CANCELED":
+      return "pending";
+    case "SUBSCRIPTION_STATE_CANCELED":
+      return "cancelled";
+    case "SUBSCRIPTION_STATE_EXPIRED":
+      return "expired";
+    default:
+      return "unknown";
+  }
+}
+
+export function isCloudPremiumStatus(status: SubscriptionStatus): boolean {
+  return status === "active" || status === "grace_period";
+}
+
+function chooseLineItem(
+  purchase: androidpublisher_v3.Schema$SubscriptionPurchaseV2,
+  expectedProductId?: string
+): androidpublisher_v3.Schema$SubscriptionPurchaseLineItem {
+  const lineItems = purchase.lineItems ?? [];
+  const matchingItems = expectedProductId
+    ? lineItems.filter((item) => item.productId === expectedProductId)
+    : lineItems;
+  const candidates = matchingItems.length > 0 ? matchingItems : lineItems;
+
+  const selected = candidates
+    .slice()
+    .sort(
+      (left, right) =>
+        parseGoogleDate(right.expiryTime, new Date(0)).getTime() -
+        parseGoogleDate(left.expiryTime, new Date(0)).getTime()
+    )[0];
+
+  if (!selected) {
+    throw new PurchaseVerificationError(
+      "Google Play response did not contain a subscription line item"
+    );
+  }
+  if (expectedProductId && selected.productId !== expectedProductId) {
+    throw new PurchaseVerificationError("Google Play product does not match the requested product");
+  }
+
+  return selected;
+}
+
+export function snapshotFromGooglePurchase(
+  purchase: androidpublisher_v3.Schema$SubscriptionPurchaseV2,
+  expectedProductId?: string
+): SubscriptionSnapshot {
+  const lineItem = chooseLineItem(purchase, expectedProductId);
+  const basePlanId = lineItem.offerDetails?.basePlanId;
+  const productId = lineItem.productId;
+
+  if (!basePlanId || !PRODUCT_TO_PLAN[basePlanId]) {
+    throw new PurchaseVerificationError(
+      `Unknown Google Play base plan: ${basePlanId ?? "missing"}`
+    );
+  }
+  if (!productId) {
+    throw new PurchaseVerificationError("Google Play response did not contain a product ID");
+  }
+
+  const googleSubscriptionState = purchase.subscriptionState ?? "SUBSCRIPTION_STATE_UNSPECIFIED";
+
+  return {
+    purchaseData: purchase as unknown as Record<string, unknown>,
+    startsAt: parseGoogleDate(purchase.startTime),
+    expiresAt: parseGoogleDate(lineItem.expiryTime),
+    status: normalizeSubscriptionStatus(googleSubscriptionState),
+    googleSubscriptionState,
+    planType: PRODUCT_TO_PLAN[basePlanId].plan,
+    basePlanId,
+    productId,
+    latestOrderId: lineItem.latestSuccessfulOrderId ?? purchase.latestOrderId ?? undefined,
+  };
+}
+
+async function fetchGooglePlaySubscriptionSnapshot(
+  purchaseToken: string,
+  productId: string,
+  packageName: string
+): Promise<SubscriptionSnapshot> {
+  const androidPublisher = getAndroidPublisher();
+  try {
+    const response = await androidPublisher.purchases.subscriptionsv2.get({
+      packageName,
+      token: purchaseToken,
+    });
+    return snapshotFromGooglePurchase(response.data, productId);
+  } catch (error) {
+    if (error instanceof PurchaseVerificationError) throw error;
+    const responseStatus = (error as { response?: { status?: number } }).response?.status;
+    if (responseStatus === 400 || responseStatus === 404) {
+      throw new PurchaseVerificationError(
+        error instanceof Error ? error.message : "Google Play verification failed"
+      );
+    }
+    throw error;
+  }
 }
 
 export async function logSubscriptionEvent({
@@ -173,11 +271,10 @@ export async function logSubscriptionEvent({
     created_at: FieldValue.serverTimestamp(),
   };
 
-  // Only include fields that have defined values — Firestore rejects undefined
   if (planType !== undefined) eventDoc.plan_type = planType;
   if (productId !== undefined) eventDoc.product_id = productId;
   if (basePlanId !== undefined) eventDoc.base_plan_id = basePlanId;
-  if (purchaseToken !== undefined) eventDoc.purchase_token = purchaseToken;
+  if (purchaseToken !== undefined) eventDoc.purchase_token_hash = hashPurchaseToken(purchaseToken);
   if (purchaseState !== undefined) eventDoc.purchase_state = purchaseState;
   if (orderId !== undefined) eventDoc.order_id = orderId;
   if (billingResponseCode !== undefined) eventDoc.billing_response_code = billingResponseCode;
@@ -191,139 +288,124 @@ export async function logSubscriptionEvent({
 }
 
 /**
- * Verify a Google Play subscription purchase server-side.
- * - Calls androidpublisher.purchases.subscriptions.get
- * - Validates paymentState
- * - Maps productId to plan
- * - Upserts subscription document in Firestore
+ * Verifies the token with Google Play and links it to exactly one Firebase UID.
+ * Client-provided plan, order, payment, and email data are intentionally ignored.
  */
 export async function verifyGooglePlaySubscription(
   userId: string,
   appId: string,
   purchaseToken: string,
   productId: string,
-  packageName: string,
-  basePlanId: string
+  packageName: string
 ): Promise<VerifyResult> {
+  if (mapPackageNameToAppId(packageName).toLowerCase() !== appId.toLowerCase()) {
+    throw new PurchaseVerificationError("Package name does not belong to the authenticated app");
+  }
+
   const snapshot = await fetchGooglePlaySubscriptionSnapshot(purchaseToken, productId, packageName);
-
-  const purchaseData = snapshot.purchaseData;
-
-  // paymentState: 0 = pending, 1 = received, 2 = free trial, 3 = deferred
-  if (purchaseData.paymentState !== 1 && purchaseData.paymentState !== 2) {
-    await logSubscriptionEvent({
-      userId,
-      appId,
-      eventType: "verify_failed",
-      eventSource: "backend_verify",
-      productId,
-      purchaseToken,
-      newStatus: "payment_not_received",
-      metadata: {
-        reason: "payment_not_received",
-        payment_state: purchaseData.paymentState,
-      },
-    });
-    return {
-      success: false,
-      plan_type: "free",
-      expires_at: new Date(),
-      status: "payment_not_received",
-    };
-  }
-
-  // ── Map base plan to plan type (basePlanId matches PRODUCT_TO_PLAN keys) ──
-  const mapping = PRODUCT_TO_PLAN[basePlanId];
-  if (!mapping) {
-    throw new Error(`Unknown basePlanId: ${basePlanId}`);
-  }
-
-  const startsAt = new Date();
-  const expiresAt =
-    snapshot.expiresAt.getTime() > 0
-      ? snapshot.expiresAt
-      : new Date(startsAt.getTime() + mapping.days * 24 * 60 * 60 * 1000);
-
-  // ── Upsert subscription in Firestore ──
   const db = getFirestore();
-  const subRef = db.collection("subscriptions");
-
-  // Check if this purchase token already exists
-  const existing = await subRef
+  const subscriptions = db.collection("subscriptions");
+  const targetRef = subscriptions.doc(subscriptionDocumentId(appId, purchaseToken));
+  const legacySnap = await subscriptions
     .where("purchase_token", "==", purchaseToken)
     .where("app_id", "==", appId)
     .limit(1)
     .get();
+  const legacyRef = legacySnap.empty ? null : legacySnap.docs[0].ref;
 
-  const subData: Omit<SubscriptionDoc, "starts_at" | "expires_at" | "verified_at"> & {
-    starts_at: FieldValue | Date;
-    expires_at: Date;
-    verified_at: FieldValue;
-  } = {
-    user_id: userId,
-    app_id: appId,
-    plan_type: mapping.plan,
-    purchase_token: purchaseToken,
-    product_id: productId,
-    status: snapshot.status,
-    starts_at: startsAt,
-    expires_at: expiresAt,
-    verified_at: FieldValue.serverTimestamp(),
-    raw_google_response: purchaseData as unknown as Record<string, unknown>,
-  };
+  const linkStatus = await db.runTransaction(async (transaction) => {
+    const targetDoc = await transaction.get(targetRef);
+    const legacyDoc =
+      legacyRef && legacyRef.path !== targetRef.path ? await transaction.get(legacyRef) : null;
+    const existingData = (targetDoc.exists ? targetDoc.data() : legacyDoc?.data()) as
+      | Record<string, unknown>
+      | undefined;
+    const existingUserId = existingData?.user_id;
+    const resolvedLinkStatus = resolvePurchaseLinkStatus(existingUserId, userId);
 
-  if (existing.empty) {
-    await subRef.add(subData);
-  } else {
-    await existing.docs[0].ref.update(subData);
-  }
+    const now = FieldValue.serverTimestamp();
+    transaction.set(
+      targetRef,
+      {
+        user_id: userId,
+        app_id: appId,
+        plan_type: snapshot.planType,
+        purchase_token: purchaseToken,
+        purchase_token_hash: hashPurchaseToken(purchaseToken),
+        package_name: packageName,
+        product_id: snapshot.productId,
+        base_plan_id: snapshot.basePlanId,
+        status: snapshot.status,
+        google_subscription_state: snapshot.googleSubscriptionState,
+        latest_order_id: snapshot.latestOrderId ?? null,
+        starts_at: snapshot.startsAt,
+        expires_at: snapshot.expiresAt,
+        linked_at: existingData?.linked_at ?? now,
+        verified_at: now,
+        last_verified_at: now,
+        raw_google_response: snapshot.purchaseData,
+      },
+      { merge: true }
+    );
+
+    if (legacyRef && legacyRef.path !== targetRef.path) {
+      transaction.delete(legacyRef);
+    }
+
+    return resolvedLinkStatus;
+  });
 
   await logSubscriptionEvent({
     userId,
     appId,
     eventType: "verify_success",
     eventSource: "backend_verify",
-    planType: mapping.plan,
-    productId,
+    planType: snapshot.planType,
+    productId: snapshot.productId,
+    basePlanId: snapshot.basePlanId,
     purchaseToken,
+    orderId: snapshot.latestOrderId,
     newStatus: snapshot.status,
     metadata: {
-      expires_at: expiresAt.toISOString(),
-      is_new: existing.empty,
-      payment_state: purchaseData.paymentState,
+      link_status: linkStatus,
+      expires_at: snapshot.expiresAt.toISOString(),
+      google_subscription_state: snapshot.googleSubscriptionState,
     },
   });
 
   return {
     success: true,
-    plan_type: mapping.plan,
-    expires_at: expiresAt,
-    status: snapshot.status,
+    linkStatus,
+    entitlementStatus: snapshot.status,
+    planType: snapshot.planType,
+    basePlanId: snapshot.basePlanId,
+    productId: snapshot.productId,
+    expiresAt: snapshot.expiresAt,
   };
 }
 
-/**
- * Get the user's active subscription for a specific app.
- */
 export async function getActiveSubscription(
   userId: string,
   appId: string
 ): Promise<SubscriptionDoc | null> {
   const db = getFirestore();
-  const now = new Date();
+  const now = Date.now();
+  const snap = await db.collection("subscriptions").where("user_id", "==", userId).get();
 
-  const snap = await db
-    .collection("subscriptions")
-    .where("user_id", "==", userId)
-    .where("app_id", "==", appId)
-    .where("status", "==", "active")
-    .where("expires_at", ">", now)
-    .orderBy("expires_at", "desc")
-    .limit(1)
-    .get();
+  const eligible = snap.docs
+    .map((doc) => doc.data() as SubscriptionDoc)
+    .filter(
+      (subscription) =>
+        subscription.app_id === appId &&
+        isCloudPremiumStatus(subscription.status) &&
+        (toDate(subscription.expires_at)?.getTime() ?? 0) > now
+    )
+    .sort(
+      (left, right) =>
+        (toDate(right.expires_at)?.getTime() ?? 0) - (toDate(left.expires_at)?.getTime() ?? 0)
+    );
 
-  if (snap.empty) return null;
-  return snap.docs[0].data() as SubscriptionDoc;
+  return eligible[0] ?? null;
 }
 
 export async function reconcileSubscriptionFromGoogle({
@@ -337,76 +419,72 @@ export async function reconcileSubscriptionFromGoogle({
   rawEvent,
 }: ReconcileSubscriptionInput): Promise<ReconcileSubscriptionResult> {
   const db = getFirestore();
-
   const existingSnap = await db
     .collection("subscriptions")
     .where("purchase_token", "==", purchaseToken)
     .limit(1)
     .get();
-
   const existingDoc = existingSnap.empty ? null : existingSnap.docs[0];
   const existingData = existingDoc?.data() as SubscriptionDoc | undefined;
-
   const resolvedAppId = appId ?? existingData?.app_id ?? mapPackageNameToAppId(packageName);
   const resolvedUserId = userId ?? existingData?.user_id ?? "unknown";
+  const snapshot = await fetchGooglePlaySubscriptionSnapshot(purchaseToken, productId, packageName);
+  const targetRef = db
+    .collection("subscriptions")
+    .doc(subscriptionDocumentId(resolvedAppId, purchaseToken));
+  const previousStatus = existingData?.status;
+  const previousExpiry = toDate(existingData?.expires_at)?.getTime();
+  const hasStatusChanged = previousStatus !== snapshot.status;
+  const hasExpiryChanged = previousExpiry !== snapshot.expiresAt.getTime();
+  const now = FieldValue.serverTimestamp();
 
-  const forcedStatus = mapTriggerEventToStatus(triggerEventType);
-  const snapshot = await fetchGooglePlaySubscriptionSnapshot(
-    purchaseToken,
-    productId,
-    packageName,
-    forcedStatus
+  await targetRef.set(
+    {
+      user_id: resolvedUserId,
+      app_id: resolvedAppId,
+      plan_type: snapshot.planType,
+      purchase_token: purchaseToken,
+      purchase_token_hash: hashPurchaseToken(purchaseToken),
+      package_name: packageName,
+      product_id: snapshot.productId,
+      base_plan_id: snapshot.basePlanId,
+      status: snapshot.status,
+      google_subscription_state: snapshot.googleSubscriptionState,
+      latest_order_id: snapshot.latestOrderId ?? null,
+      starts_at: snapshot.startsAt,
+      expires_at: snapshot.expiresAt,
+      verified_at: now,
+      last_verified_at: now,
+      raw_google_response: snapshot.purchaseData,
+    },
+    { merge: true }
   );
 
-  const previousStatus = existingData?.status;
-  const hasStatusChanged = previousStatus !== snapshot.status;
-  const hasExpiryChanged =
-    existingData?.expires_at?.toDate?.()?.getTime?.() !== snapshot.expiresAt.getTime();
-
-  if (existingDoc) {
-    // Preserve existing plan_type if snapshot couldn't resolve it (productId != basePlanId)
-    const resolvedPlanType = snapshot.planType !== "free" ? snapshot.planType : (existingData?.plan_type ?? snapshot.planType);
-
-    await existingDoc.ref.update({
-      app_id: resolvedAppId,
-      user_id: resolvedUserId,
-      plan_type: resolvedPlanType,
-      product_id: productId,
-      status: snapshot.status,
-      expires_at: snapshot.expiresAt,
-      verified_at: FieldValue.serverTimestamp(),
-      raw_google_response: snapshot.purchaseData,
-    });
+  if (existingDoc && existingDoc.ref.path !== targetRef.path) {
+    await existingDoc.ref.delete();
   }
 
-  if (triggerEventType) {
+  if (triggerEventType || hasStatusChanged || hasExpiryChanged) {
     await logSubscriptionEvent({
       userId: resolvedUserId,
       appId: resolvedAppId,
-      eventType: triggerEventType,
+      eventType:
+        triggerEventType ??
+        (hasStatusChanged
+          ? isCloudPremiumStatus(snapshot.status)
+            ? "renewed"
+            : snapshot.status === "cancelled"
+              ? "cancelled"
+              : snapshot.status === "expired"
+                ? "expired"
+                : "plan_transition"
+          : "plan_transition"),
       eventSource,
       planType: snapshot.planType,
-      productId,
+      productId: snapshot.productId,
+      basePlanId: snapshot.basePlanId,
       purchaseToken,
-      oldStatus: previousStatus,
-      newStatus: snapshot.status,
-      metadata: rawEvent,
-    });
-  }
-
-  if (hasStatusChanged || hasExpiryChanged) {
-    await logSubscriptionEvent({
-      userId: resolvedUserId,
-      appId: resolvedAppId,
-      eventType: hasStatusChanged
-        ? snapshot.status === "active"
-          ? "renewed"
-          : snapshot.status
-        : "plan_transition",
-      eventSource,
-      planType: snapshot.planType,
-      productId,
-      purchaseToken,
+      orderId: snapshot.latestOrderId,
       oldStatus: previousStatus,
       newStatus: snapshot.status,
       metadata: {
@@ -417,10 +495,10 @@ export async function reconcileSubscriptionFromGoogle({
   }
 
   return {
-    updated: Boolean(existingDoc) && (hasStatusChanged || hasExpiryChanged),
+    updated: hasStatusChanged || hasExpiryChanged || !existingDoc,
     appId: resolvedAppId,
     userId: resolvedUserId,
-    productId,
+    productId: snapshot.productId,
     status: snapshot.status,
     previousStatus,
     expiresAt: snapshot.expiresAt,
@@ -433,33 +511,28 @@ export async function reconcileActiveSubscriptions(limit = 100): Promise<{
   failed: number;
 }> {
   const db = getFirestore();
-  const snap = await db
-    .collection("subscriptions")
-    .where("status", "in", ["active", "cancelled"])
-    .limit(limit)
-    .get();
-
+  const snap = await db.collection("subscriptions").limit(limit).get();
   let updated = 0;
   let failed = 0;
 
   for (const doc of snap.docs) {
     const data = doc.data() as SubscriptionDoc;
+    if (!data.purchase_token || !data.product_id) continue;
+
     try {
       const result = await reconcileSubscriptionFromGoogle({
         appId: data.app_id,
-        userId: data.user_id,
+        userId: data.user_id ?? undefined,
         purchaseToken: data.purchase_token,
         productId: data.product_id,
-        packageName: (data.raw_google_response?.packageName as string) ?? "com.sudoajay.descroll",
+        packageName: data.package_name ?? "com.sudoajay.descroll",
         eventSource: "google_play",
       });
-      if (result.updated) {
-        updated += 1;
-      }
+      if (result.updated) updated += 1;
     } catch (error) {
       failed += 1;
       await logSubscriptionEvent({
-        userId: data.user_id,
+        userId: data.user_id ?? "unknown",
         appId: data.app_id,
         eventType: "reconciliation_mismatch",
         eventSource: "google_play",
@@ -474,9 +547,19 @@ export async function reconcileActiveSubscriptions(limit = 100): Promise<{
     }
   }
 
-  return {
-    scanned: snap.size,
-    updated,
-    failed,
-  };
+  return { scanned: snap.size, updated, failed };
+}
+
+function toDate(value: unknown): Date | null {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  if (typeof value === "string" || typeof value === "number") {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+  }
+  if (typeof value === "object") {
+    const timestamp = value as { toDate?: () => Date };
+    if (typeof timestamp.toDate === "function") return timestamp.toDate();
+  }
+  return null;
 }

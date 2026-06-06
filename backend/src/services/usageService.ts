@@ -26,12 +26,17 @@ export async function trackUsage(params: TrackUsageParams): Promise<number> {
 
   // ── Redis: increment counter and set expiry ──
   const redis = getRedis();
-  const newCount = await redis.incr(redisKey);
-
-  // Set expiry to next midnight IST if this is the first message today
-  if (newCount === 1) {
-    const secondsUntilMidnight = getSecondsUntilMidnightIST();
-    await redis.expire(redisKey, secondsUntilMidnight);
+  let newCount = 0;
+  if (redis) {
+    try {
+      newCount = await redis.incr(redisKey);
+      if (newCount === 1) {
+        const secondsUntilMidnight = getSecondsUntilMidnightIST();
+        await redis.expire(redisKey, secondsUntilMidnight);
+      }
+    } catch (error) {
+      console.error("[usage] Redis write failed; continuing with Firestore:", error);
+    }
   }
 
   // ── Firestore: atomic usage update ──
@@ -66,7 +71,12 @@ export async function getDailyCount(userId: string, appId: string): Promise<numb
   const todayIST = getTodayIST();
   const redisKey = `rate:${userId}:${appId}:${todayIST}`;
   const redis = getRedis();
-  return (await redis.get<number>(redisKey)) ?? 0;
+  if (!redis) return 0;
+  try {
+    return (await redis.get<number>(redisKey)) ?? 0;
+  } catch {
+    return 0;
+  }
 }
 
 /** Returns today's date string in IST (UTC+5:30) as YYYY-MM-DD */

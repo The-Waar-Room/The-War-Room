@@ -40,16 +40,17 @@ adminRouter.get("/dashboard", async (_req: Request, res: Response): Promise<void
   try {
     const db = getFirestore();
 
-    const [usersSnap, subsSnap] = await Promise.all([
+    const [usersSnap, activeSubsSnap, graceSubsSnap] = await Promise.all([
       db.collection("users").count().get(),
       db.collection("subscriptions").where("status", "==", "active").count().get(),
+      db.collection("subscriptions").where("status", "==", "grace_period").count().get(),
     ]);
 
     res.json({
       success: true,
       data: {
         totalUsers: usersSnap.data().count,
-        activeSubscriptions: subsSnap.data().count,
+        activeSubscriptions: activeSubsSnap.data().count + graceSubsSnap.data().count,
       },
     });
   } catch (err) {

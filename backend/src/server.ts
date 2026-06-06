@@ -13,14 +13,16 @@ async function start(): Promise<void> {
   console.log("[startup] Initializing Firebase...");
   initFirebase();
 
-  console.log("[startup] Initializing Redis...");
-  await initRedis();
-
   console.log("[startup] Initializing Vertex AI...");
   initVertexAI();
 
   const server = app.listen(PORT, () => {
     console.log(`[startup] Server listening on port ${PORT}`);
+  });
+
+  console.log("[startup] Initializing Redis in the background...");
+  void initRedis().catch((error) => {
+    console.error("[startup] Redis unavailable; continuing in fail-open mode:", error);
   });
 
   // ── Graceful shutdown ──

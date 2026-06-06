@@ -1,27 +1,29 @@
 import { Redis } from "@upstash/redis";
 
-let redis: Redis;
+let redis: Redis | null = null;
 
 export async function initRedis(): Promise<void> {
   const url = process.env.UPSTASH_REDIS_URL;
   const token = process.env.UPSTASH_REDIS_TOKEN;
 
   if (!url || !token) {
-    throw new Error("UPSTASH_REDIS_URL and UPSTASH_REDIS_TOKEN are required");
+    console.warn("[redis] Credentials unavailable; continuing without Redis");
+    redis = null;
+    return;
   }
 
-  redis = new Redis({ url, token });
+  const candidate = new Redis({ url, token });
 
   // Verify connection
-  const pong = await redis.ping();
+  const pong = await candidate.ping();
   if (pong !== "PONG") {
     throw new Error(`Redis ping failed: ${pong}`);
   }
 
+  redis = candidate;
   console.log("[redis] Connected to Upstash Redis");
 }
 
-export function getRedis(): Redis {
-  if (!redis) throw new Error("Redis not initialized — call initRedis() first");
+export function getRedis(): Redis | null {
   return redis;
 }

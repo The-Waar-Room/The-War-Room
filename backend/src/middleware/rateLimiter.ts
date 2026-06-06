@@ -41,6 +41,7 @@ export async function rateLimiter(
     const redis = getRedis();
     let currentCount = 0;
     try {
+      if (!redis) throw new Error("Redis unavailable");
       currentCount = (await redis.get<number>(redisKey)) ?? 0;
     } catch (err) {
       console.error(`[rateLimiter] Redis read failed for key=${redisKey}:`, err);
@@ -88,7 +89,9 @@ export async function getUserPlan(userId: string, appId: string): Promise<PlanTy
 
   const active = subSnap.docs
     .map((doc) => doc.data() as Record<string, unknown>)
-    .filter((doc) => doc.app_id === appId && doc.status === "active")
+    .filter(
+      (doc) => doc.app_id === appId && (doc.status === "active" || doc.status === "grace_period")
+    )
     .map((doc) => {
       const expiresAt = toDate(doc.expires_at);
       return {

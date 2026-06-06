@@ -1,6 +1,7 @@
 import { SecretManagerServiceClient } from "@google-cloud/secret-manager";
 
-const REQUIRED_SECRETS = ["UPSTASH_REDIS_URL", "UPSTASH_REDIS_TOKEN", "JWT_SECRET"] as const;
+const REQUIRED_SECRETS = ["JWT_SECRET"] as const;
+const OPTIONAL_SECRETS = ["UPSTASH_REDIS_URL", "UPSTASH_REDIS_TOKEN"] as const;
 
 export async function loadSecrets(): Promise<void> {
   const client = new SecretManagerServiceClient();
@@ -24,6 +25,18 @@ export async function loadSecrets(): Promise<void> {
     }
 
     process.env[secretName] = value;
+  }
+
+  for (const secretName of OPTIONAL_SECRETS) {
+    if (process.env[secretName]) continue;
+    try {
+      const name = `projects/${projectId}/secrets/${secretName}/versions/latest`;
+      const [version] = await client.accessSecretVersion({ name });
+      const value = version.payload?.data?.toString();
+      if (value) process.env[secretName] = value;
+    } catch (error) {
+      console.warn(`[secrets] Optional secret ${secretName} unavailable:`, error);
+    }
   }
 
   const missing = REQUIRED_SECRETS.filter((key) => !process.env[key]);
