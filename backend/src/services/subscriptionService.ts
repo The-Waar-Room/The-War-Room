@@ -31,6 +31,7 @@ export interface SubscriptionSnapshot {
   basePlanId: string;
   productId: string;
   latestOrderId?: string;
+  linkedPurchaseToken?: string;
 }
 
 interface ReconcileSubscriptionInput {
@@ -81,7 +82,11 @@ export class PurchaseOwnershipConflictError extends Error {
 }
 
 export class PurchaseVerificationError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    public readonly reason = "purchase_verification_failed",
+    public readonly upstreamStatus?: number
+  ) {
     super(message);
     this.name = "PurchaseVerificationError";
   }
@@ -178,11 +183,15 @@ function chooseLineItem(
 
   if (!selected) {
     throw new PurchaseVerificationError(
-      "Google Play response did not contain a subscription line item"
+      "Google Play response did not contain a subscription line item",
+      "missing_line_item"
     );
   }
   if (expectedProductId && selected.productId !== expectedProductId) {
-    throw new PurchaseVerificationError("Google Play product does not match the requested product");
+    throw new PurchaseVerificationError(
+      "Google Play product does not match the requested product",
+      "product_mismatch"
+    );
   }
 
   return selected;
@@ -198,11 +207,15 @@ export function snapshotFromGooglePurchase(
 
   if (!basePlanId || !PRODUCT_TO_PLAN[basePlanId]) {
     throw new PurchaseVerificationError(
-      `Unknown Google Play base plan: ${basePlanId ?? "missing"}`
+      `Unknown Google Play base plan: ${basePlanId ?? "missing"}`,
+      "unknown_base_plan"
     );
   }
   if (!productId) {
-    throw new PurchaseVerificationError("Google Play response did not contain a product ID");
+    throw new PurchaseVerificationError(
+      "Google Play response did not contain a product ID",
+      "missing_product_id"
+    );
   }
 
   const googleSubscriptionState = purchase.subscriptionState ?? "SUBSCRIPTION_STATE_UNSPECIFIED";
@@ -217,6 +230,7 @@ export function snapshotFromGooglePurchase(
     basePlanId,
     productId,
     latestOrderId: lineItem.latestSuccessfulOrderId ?? purchase.latestOrderId ?? undefined,
+    linkedPurchaseToken: purchase.linkedPurchaseToken ?? undefined,
   };
 }
 
@@ -237,7 +251,9 @@ async function fetchGooglePlaySubscriptionSnapshot(
     const responseStatus = (error as { response?: { status?: number } }).response?.status;
     if (responseStatus === 400 || responseStatus === 404) {
       throw new PurchaseVerificationError(
-        error instanceof Error ? error.message : "Google Play verification failed"
+        error instanceof Error ? error.message : "Google Play verification failed",
+        responseStatus === 404 ? "purchase_not_found" : "google_rejected_purchase",
+        responseStatus
       );
     }
     throw error;
@@ -299,7 +315,10 @@ export async function verifyGooglePlaySubscription(
   packageName: string
 ): Promise<VerifyResult> {
   if (mapPackageNameToAppId(packageName).toLowerCase() !== appId.toLowerCase()) {
-    throw new PurchaseVerificationError("Package name does not belong to the authenticated app");
+    throw new PurchaseVerificationError(
+      "Package name does not belong to the authenticated app",
+      "package_app_mismatch"
+    );
   }
 
   const snapshot = await fetchGooglePlaySubscriptionSnapshot(purchaseToken, productId, packageName);
@@ -312,15 +331,37 @@ export async function verifyGooglePlaySubscription(
     .limit(1)
     .get();
   const legacyRef = legacySnap.empty ? null : legacySnap.docs[0].ref;
+  const linkedPurchaseSnap = snapshot.linkedPurchaseToken
+    ? await subscriptions
+        .where("purchase_token", "==", snapshot.linkedPurchaseToken)
+        .where("app_id", "==", appId)
+        .limit(1)
+        .get()
+    : null;
+  const linkedPurchaseRef =
+    linkedPurchaseSnap && !linkedPurchaseSnap.empty ? linkedPurchaseSnap.docs[0].ref : null;
 
   const linkStatus = await db.runTransaction(async (transaction) => {
     const targetDoc = await transaction.get(targetRef);
     const legacyDoc =
       legacyRef && legacyRef.path !== targetRef.path ? await transaction.get(legacyRef) : null;
-    const existingData = (targetDoc.exists ? targetDoc.data() : legacyDoc?.data()) as
+    const linkedPurchaseDoc =
+      linkedPurchaseRef &&
+      linkedPurchaseRef.path !== targetRef.path &&
+      linkedPurchaseRef.path !== legacyRef?.path
+        ? await transaction.get(linkedPurchaseRef)
+        : null;
+    const targetData = targetDoc.data() as Record<string, unknown> | undefined;
+    const legacyData = legacyDoc?.data() as Record<string, unknown> | undefined;
+    const linkedPurchaseData = linkedPurchaseDoc?.data() as Record<string, unknown> | undefined;
+    const existingData = (targetData ?? legacyData ?? linkedPurchaseData) as
       | Record<string, unknown>
       | undefined;
-    const existingUserId = existingData?.user_id;
+    const existingUserId = targetData?.user_id ?? legacyData?.user_id;
+
+    resolvePurchaseLinkStatus(targetData?.user_id, userId);
+    resolvePurchaseLinkStatus(legacyData?.user_id, userId);
+    resolvePurchaseLinkStatus(linkedPurchaseData?.user_id, userId);
     const resolvedLinkStatus = resolvePurchaseLinkStatus(existingUserId, userId);
 
     const now = FieldValue.serverTimestamp();
@@ -338,6 +379,9 @@ export async function verifyGooglePlaySubscription(
         status: snapshot.status,
         google_subscription_state: snapshot.googleSubscriptionState,
         latest_order_id: snapshot.latestOrderId ?? null,
+        linked_purchase_token_hash: snapshot.linkedPurchaseToken
+          ? hashPurchaseToken(snapshot.linkedPurchaseToken)
+          : null,
         starts_at: snapshot.startsAt,
         expires_at: snapshot.expiresAt,
         linked_at: existingData?.linked_at ?? now,
@@ -350,6 +394,22 @@ export async function verifyGooglePlaySubscription(
 
     if (legacyRef && legacyRef.path !== targetRef.path) {
       transaction.delete(legacyRef);
+    }
+    if (
+      linkedPurchaseRef &&
+      linkedPurchaseRef.path !== targetRef.path &&
+      linkedPurchaseRef.path !== legacyRef?.path
+    ) {
+      transaction.set(
+        linkedPurchaseRef,
+        {
+          status: "cancelled",
+          google_subscription_state: "SUBSCRIPTION_STATE_CANCELED",
+          replaced_by_token_hash: hashPurchaseToken(purchaseToken),
+          last_verified_at: now,
+        },
+        { merge: true }
+      );
     }
 
     return resolvedLinkStatus;
@@ -370,6 +430,9 @@ export async function verifyGooglePlaySubscription(
       link_status: linkStatus,
       expires_at: snapshot.expiresAt.toISOString(),
       google_subscription_state: snapshot.googleSubscriptionState,
+      linked_purchase_token_hash: snapshot.linkedPurchaseToken
+        ? hashPurchaseToken(snapshot.linkedPurchaseToken)
+        : null,
     },
   });
 

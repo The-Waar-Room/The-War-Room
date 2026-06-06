@@ -32,6 +32,8 @@ export interface SubscriptionDoc {
   status: SubscriptionStatus;
   google_subscription_state?: string;
   latest_order_id?: string;
+  linked_purchase_token_hash?: string;
+  replaced_by_token_hash?: string;
   starts_at: FirebaseFirestore.Timestamp | Date;
   expires_at: FirebaseFirestore.Timestamp | Date;
   linked_at?: FirebaseFirestore.Timestamp | Date;

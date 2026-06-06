@@ -51,6 +51,23 @@ test("derives the six-month plan from the v2 line item", () => {
   assert.equal(snapshot.expiresAt.toISOString(), "2026-12-06T03:00:00.000Z");
 });
 
+test("retains the old token reference during a Google Play plan replacement", () => {
+  const snapshot = snapshotFromGooglePurchase({
+    subscriptionState: "SUBSCRIPTION_STATE_ACTIVE",
+    linkedPurchaseToken: "old-token",
+    lineItems: [
+      {
+        productId: "premium_access",
+        expiryTime: "2027-06-06T03:00:00Z",
+        offerDetails: { basePlanId: "premium-yearly" },
+      },
+    ],
+  });
+
+  assert.equal(snapshot.linkedPurchaseToken, "old-token");
+  assert.equal(snapshot.planType, "yearly");
+});
+
 test("derives monthly and yearly plans without trusting client plan data", () => {
   const monthly = snapshotFromGooglePurchase({
     subscriptionState: "SUBSCRIPTION_STATE_ACTIVE",

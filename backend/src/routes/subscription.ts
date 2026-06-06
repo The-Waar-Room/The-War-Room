@@ -193,10 +193,20 @@ async function linkSubscription(req: AuthenticatedRequest, res: Response): Promi
       return;
     }
     if (err instanceof PurchaseVerificationError) {
-      console.warn("[subscription/link] Purchase verification rejected:", err.message);
+      console.warn(
+        JSON.stringify({
+          event: "subscription_link_rejected",
+          reason: err.reason,
+          upstreamStatus: err.upstreamStatus ?? null,
+          message: err.message,
+          appId: req.appId ?? null,
+          uid: req.decodedToken?.uid ?? null,
+        })
+      );
       res.status(400).json({
         success: false,
         error: "purchase_verification_failed",
+        verificationReason: err.reason,
       });
       return;
     }
