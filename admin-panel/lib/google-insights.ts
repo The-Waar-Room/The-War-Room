@@ -617,13 +617,6 @@ export async function getAnalyticsOverview(
             },
             {
               dateRanges: [{ startDate: "28daysAgo", endDate: "today" }],
-              dimensions: [{ name: "appVersion" }],
-              metrics: [{ name: "activeUsers" }],
-              orderBys: [{ metric: { metricName: "activeUsers" }, desc: true }],
-              limit: "1",
-            },
-            {
-              dateRanges: [{ startDate: "28daysAgo", endDate: "today" }],
               dimensions: [{ name: "date" }],
               metrics: [{ name: "activeUsers" }],
               orderBys: [{ dimension: { dimensionName: "date" } }],
@@ -650,14 +643,22 @@ export async function getAnalyticsOverview(
               orderBys: [{ metric: { metricName: "activeUsers" }, desc: true }],
               limit: "5",
             },
-            {
-              dateRanges: [{ startDate: "28daysAgo", endDate: "today" }],
-              dimensions: [{ name: "deviceModel" }],
-              metrics: [{ name: "activeUsers" }],
-              orderBys: [{ metric: { metricName: "activeUsers" }, desc: true }],
-              limit: "5",
-            },
           ],
+        }),
+      },
+      ["https://www.googleapis.com/auth/analytics.readonly"]
+    );
+
+    const topDevicesResponse = await googleJsonFetch<AnalyticsReport>(
+      `https://analyticsdata.googleapis.com/v1beta/${property}:runReport`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          dateRanges: [{ startDate: "28daysAgo", endDate: "today" }],
+          dimensions: [{ name: "deviceModel" }],
+          metrics: [{ name: "activeUsers" }],
+          orderBys: [{ metric: { metricName: "activeUsers" }, desc: true }],
+          limit: "5",
         }),
       },
       ["https://www.googleapis.com/auth/analytics.readonly"]
@@ -686,7 +687,7 @@ export async function getAnalyticsOverview(
     const topVersions = parseDimensionMetricRows(reports[2]);
     const topEvents = parseDimensionMetricRows(reports[3]);
     const topCountries = parseDimensionMetricRows(reports[4]);
-    const topDevices = parseDimensionMetricRows(reports[5]);
+    const topDevices = parseDimensionMetricRows(topDevicesResponse);
     const topVersion = topVersions[0] ?? { label: "Unknown", value: 0 };
     const topEvent = topEvents[0] ?? { label: null, value: 0 };
     const topCountry = topCountries[0] ?? { label: null, value: 0 };
