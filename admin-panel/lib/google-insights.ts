@@ -645,7 +645,6 @@ export async function getAnalyticsOverview(
                 { name: "activeUsers" },
                 { name: "totalUsers" },
                 { name: "newUsers" },
-                { name: "returningUsers" },
                 { name: "eventCount" },
                 { name: "sessions" },
                 { name: "userEngagementDuration" },
@@ -761,11 +760,10 @@ export async function getAnalyticsOverview(
     const activeUsers = parseMetricValue(reports[0], 0);
     const totalUsers = parseMetricValue(reports[0], 1);
     const newUsers = parseMetricValue(reports[0], 2);
-    const returningUsers = parseMetricValue(reports[0], 3);
-    const eventCount = parseMetricValue(reports[0], 4);
-    const sessions = parseMetricValue(reports[0], 5);
-    const engagementSeconds = parseMetricValue(reports[0], 6);
-    const engagedSessions = parseMetricValue(reports[0], 7);
+    const eventCount = parseMetricValue(reports[0], 3);
+    const sessions = parseMetricValue(reports[0], 4);
+    const engagementSeconds = parseMetricValue(reports[0], 5);
+    const engagedSessions = parseMetricValue(reports[0], 6);
     const trend = parseDimensionMetricRows(reports[1]);
     const topVersions = parseDimensionMetricRows(reports[2]);
     const topEvents = parseDimensionMetricRows(reports[3]);
@@ -788,13 +786,14 @@ export async function getAnalyticsOverview(
     const engagedSessionsPerActiveUser =
       activeUsers > 0 ? engagedSessions / activeUsers : 0;
     const sessionsPerUser = activeUsers > 0 ? sessions / activeUsers : 0;
-    const returningUserRate =
-      activeUsers > 0 ? (returningUsers / activeUsers) * 100 : 0;
+    const estimatedReturningUsers = Math.max(activeUsers - newUsers, 0);
+    const estimatedReturningUserRate =
+      activeUsers > 0 ? (estimatedReturningUsers / activeUsers) * 100 : 0;
     const retention = [
       {
-        label: "Returning users",
-        value: formatPercent(returningUserRate),
-        note: `${formatWholeNumber(returningUsers)} returning users in ${dateRange.label.toLowerCase()}`,
+        label: "Estimated returning users",
+        value: formatPercent(estimatedReturningUserRate),
+        note: `${formatWholeNumber(estimatedReturningUsers)} users inferred as active users minus new users in ${dateRange.label.toLowerCase()}`,
       },
       {
         label: "DAU / MAU",
