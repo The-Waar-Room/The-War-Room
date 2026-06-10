@@ -8,12 +8,18 @@ import {
   Clock3,
   CircleAlert,
   CheckCircle2,
+  Download,
+  Repeat,
+  RadioTower,
 } from "lucide-react";
 import Link from "next/link";
+import { useCallback } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSelectedApp } from "@/hooks/useSelectedApp";
 import { useFirestore } from "@/hooks/useFirestore";
 import { getAdminAppHref, getAdminAppLabel } from "@/lib/admin-apps";
@@ -29,6 +35,7 @@ interface AnalyticsOverviewResponse {
   configured: boolean;
   source: string;
   message: string;
+  rangeDays: number;
   summary: IntegrationMetric[];
   highlights: string[];
   details?: {
@@ -53,6 +60,15 @@ interface AnalyticsOverviewResponse {
     topVersions: Array<{
       label: string;
       value: number;
+    }>;
+    trafficSources: Array<{
+      label: string;
+      value: number;
+    }>;
+    retention: Array<{
+      label: string;
+      value: string;
+      note: string;
     }>;
   };
   health: {
@@ -181,13 +197,72 @@ function MetricBreakdownCard({
   );
 }
 
+function RetentionCard({
+  title,
+  subtitle,
+  items,
+}: {
+  title: string;
+  subtitle: string;
+  items: Array<{ label: string; value: string; note: string }>;
+}) {
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">{title}</CardTitle>
+        <p className="text-xs text-muted-foreground">{subtitle}</p>
+      </CardHeader>
+      <CardContent className="grid gap-3 sm:grid-cols-2">
+        {items.length > 0 ? (
+          items.map((item) => (
+            <div
+              key={item.label}
+              className="rounded-2xl border bg-muted/30 p-4"
+            >
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                {item.label}
+              </p>
+              <p className="mt-2 text-lg font-semibold">{item.value}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{item.note}</p>
+            </div>
+          ))
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            No retention data yet.
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function AnalyticsPage() {
   const { selectedApp } = useSelectedApp();
   const selectedAppLabel = getAdminAppLabel(selectedApp);
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const rangeDaysParam = Number(searchParams.get("days"));
+  const rangeDays =
+    rangeDaysParam === 7 || rangeDaysParam === 28 || rangeDaysParam === 90
+      ? rangeDaysParam
+      : 28;
+  const analyticsUrl = `/api/admin/analytics?app=${selectedApp}&days=${rangeDays}`;
   const { data, isLoading, error } = useFirestore<AnalyticsOverviewResponse>(
-    `/api/admin/analytics?app=${selectedApp}`,
+    analyticsUrl,
     60000
   );
+  const setRangeDays = useCallback(
+    (nextDays: string) => {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("days", nextDays);
+      params.set("app", selectedApp);
+      const qs = params.toString();
+      router.replace(`${pathname}${qs ? `?${qs}` : ""}`, { scroll: false });
+    },
+    [pathname, router, searchParams, selectedApp]
+  );
+  const exportHref = `${analyticsUrl}&format=csv`;
 
   return (
     <section className="space-y-5">
@@ -208,12 +283,31 @@ export default function AnalyticsPage() {
             and distribution.
           </p>
         </div>
-        <Link href={getAdminAppHref("/", selectedApp)}>
-          <Button variant="outline" className="gap-1.5">
-            Back to Dashboard
-            <ArrowRight className="h-4 w-4" />
-          </Button>
-        </Link>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <Tabs
+            value={String(rangeDays)}
+            onValueChange={setRangeDays}
+            className="w-full sm:w-auto"
+          >
+            <TabsList className="grid w-full grid-cols-3 sm:w-auto">
+              <TabsTrigger value="7">7 days</TabsTrigger>
+              <TabsTrigger value="28">28 days</TabsTrigger>
+              <TabsTrigger value="90">90 days</TabsTrigger>
+            </TabsList>
+          </Tabs>
+          <a href={exportHref}>
+            <Button variant="outline" className="gap-1.5">
+              Export CSV
+              <Download className="h-4 w-4" />
+            </Button>
+          </a>
+          <Link href={getAdminAppHref("/", selectedApp)}>
+            <Button variant="outline" className="gap-1.5">
+              Back to Dashboard
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+          </Link>
+        </div>
       </div>
 
       <div className="grid gap-3 md:grid-cols-3">
@@ -394,12 +488,28 @@ export default function AnalyticsPage() {
                     <li>Active users over time</li>
                     <li>Active users in the last 30 minutes</li>
                     <li>Average engagement time per active user</li>
-                    <li>Top events, countries, devices, and versions</li>
+                    <li>Retention and traffic-source breakdowns</li>
                   </ul>
                 </div>
               </CardContent>
             </Card>
           </div>
+
+          {data.details && (
+            <div className="grid gap-4 xl:grid-cols-2">
+              <RetentionCard
+                title="Retention Snapshot"
+                subtitle="Stickiness and returning-user signals from GA4."
+                items={data.details.retention}
+              />
+              <MetricBreakdownCard
+                title="Traffic Sources"
+                subtitle="Sessions by session primary channel group."
+                items={data.details.trafficSources}
+                valueLabel="sessions"
+              />
+            </div>
+          )}
 
           {data.details && (
             <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
@@ -531,8 +641,8 @@ export default function AnalyticsPage() {
                     <p className="font-medium text-slate-900">Included now</p>
                     <p className="mt-1 text-xs text-slate-600">
                       Active users, new users, realtime users, sessions, event
-                      count, engagement, daily trend, top events, countries,
-                      devices, and app versions.
+                      count, engagement, retention, traffic sources, daily
+                      trend, top events, countries, devices, and app versions.
                     </p>
                   </div>
                   <div className="rounded-2xl border bg-slate-50 p-4">
@@ -543,6 +653,32 @@ export default function AnalyticsPage() {
                       All values in this view are read from the GA4 Analytics
                       Data API for the selected property.
                     </p>
+                  </div>
+                  <div className="rounded-2xl border bg-slate-50 p-4">
+                    <div className="flex items-start gap-2">
+                      <Repeat className="mt-0.5 h-4 w-4 text-sky-600" />
+                      <div>
+                        <p className="font-medium text-slate-900">Retention</p>
+                        <p className="mt-1 text-xs text-slate-600">
+                          Returning users plus DAU/WAU/MAU stickiness ratios for
+                          quick retention review.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="rounded-2xl border bg-slate-50 p-4">
+                    <div className="flex items-start gap-2">
+                      <RadioTower className="mt-0.5 h-4 w-4 text-sky-600" />
+                      <div>
+                        <p className="font-medium text-slate-900">
+                          Acquisition
+                        </p>
+                        <p className="mt-1 text-xs text-slate-600">
+                          Session primary channel groups show where traffic is
+                          coming from, closer to the GA4 dashboard view.
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 </CardContent>
               </Card>

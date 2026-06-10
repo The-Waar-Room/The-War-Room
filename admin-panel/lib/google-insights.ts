@@ -12,6 +12,7 @@ export interface InsightOverviewResponse {
   configured: boolean;
   source: string;
   message: string;
+  rangeDays: number;
   summary: IntegrationMetric[];
   highlights: string[];
   details?: {
@@ -36,6 +37,15 @@ export interface InsightOverviewResponse {
     topVersions: Array<{
       label: string;
       value: number;
+    }>;
+    trafficSources: Array<{
+      label: string;
+      value: number;
+    }>;
+    retention: Array<{
+      label: string;
+      value: string;
+      note: string;
     }>;
   };
   health: IntegrationHealth;
@@ -360,6 +370,7 @@ function buildEmptyOverview(
   appId: AdminAppId,
   source: string,
   message: string,
+  rangeDays: number,
   summary: IntegrationMetric[],
   highlights: string[],
   health: IntegrationHealth
@@ -369,6 +380,7 @@ function buildEmptyOverview(
     configured: false,
     source,
     message,
+    rangeDays,
     summary,
     highlights,
     health,
@@ -437,6 +449,25 @@ function formatWholeNumber(value: number) {
 
 function formatPercent(value: number) {
   return `${value.toFixed(1)}%`;
+}
+
+function clampAnalyticsRangeDays(value?: number | null) {
+  if (value === 7 || value === 28 || value === 90) {
+    return value;
+  }
+
+  return 28;
+}
+
+function getAnalyticsDateRange(days: number) {
+  const rangeDays = clampAnalyticsRangeDays(days);
+
+  return {
+    rangeDays,
+    startDate: `${rangeDays}daysAgo`,
+    endDate: "today",
+    label: `Last ${rangeDays} days`,
+  };
 }
 
 function formatDuration(seconds: number) {
@@ -533,9 +564,11 @@ async function queryBigQuery(projectId: string, query: string) {
 }
 
 export async function getAnalyticsOverview(
-  appId: AdminAppId
+  appId: AdminAppId,
+  requestedRangeDays = 28
 ): Promise<InsightOverviewResponse> {
   const appConfig = APP_CONFIG[appId];
+  const dateRange = getAnalyticsDateRange(requestedRangeDays);
   const defaultHighlights = [
     "Active users over time",
     "User retention",
@@ -589,6 +622,7 @@ export async function getAnalyticsOverview(
       appId,
       "Firebase Analytics / GA4",
       `Unable to find a linked GA4 property for ${appConfig.label}. Set GA4_PROPERTY_ID_${appId === "deScroll" ? "DESCROLL" : "SOULLENS"}, or grant Analytics Admin API access so the property can be auto-discovered from the Android app stream.`,
+      dateRange.rangeDays,
       defaultAnalyticsSummary(),
       defaultHighlights,
       analyticsHealth
@@ -604,11 +638,14 @@ export async function getAnalyticsOverview(
         body: JSON.stringify({
           requests: [
             {
-              dateRanges: [{ startDate: "28daysAgo", endDate: "today" }],
+              dateRanges: [
+                { startDate: dateRange.startDate, endDate: dateRange.endDate },
+              ],
               metrics: [
                 { name: "activeUsers" },
                 { name: "totalUsers" },
                 { name: "newUsers" },
+                { name: "returningUsers" },
                 { name: "eventCount" },
                 { name: "sessions" },
                 { name: "userEngagementDuration" },
@@ -616,28 +653,36 @@ export async function getAnalyticsOverview(
               ],
             },
             {
-              dateRanges: [{ startDate: "28daysAgo", endDate: "today" }],
+              dateRanges: [
+                { startDate: dateRange.startDate, endDate: dateRange.endDate },
+              ],
               dimensions: [{ name: "date" }],
               metrics: [{ name: "activeUsers" }],
               orderBys: [{ dimension: { dimensionName: "date" } }],
-              limit: "28",
+              limit: String(dateRange.rangeDays),
             },
             {
-              dateRanges: [{ startDate: "28daysAgo", endDate: "today" }],
+              dateRanges: [
+                { startDate: dateRange.startDate, endDate: dateRange.endDate },
+              ],
               dimensions: [{ name: "appVersion" }],
               metrics: [{ name: "activeUsers" }],
               orderBys: [{ metric: { metricName: "activeUsers" }, desc: true }],
               limit: "5",
             },
             {
-              dateRanges: [{ startDate: "28daysAgo", endDate: "today" }],
+              dateRanges: [
+                { startDate: dateRange.startDate, endDate: dateRange.endDate },
+              ],
               dimensions: [{ name: "eventName" }],
               metrics: [{ name: "eventCount" }],
               orderBys: [{ metric: { metricName: "eventCount" }, desc: true }],
               limit: "5",
             },
             {
-              dateRanges: [{ startDate: "28daysAgo", endDate: "today" }],
+              dateRanges: [
+                { startDate: dateRange.startDate, endDate: dateRange.endDate },
+              ],
               dimensions: [{ name: "country" }],
               metrics: [{ name: "activeUsers" }],
               orderBys: [{ metric: { metricName: "activeUsers" }, desc: true }],
@@ -654,11 +699,48 @@ export async function getAnalyticsOverview(
       {
         method: "POST",
         body: JSON.stringify({
-          dateRanges: [{ startDate: "28daysAgo", endDate: "today" }],
+          dateRanges: [
+            { startDate: dateRange.startDate, endDate: dateRange.endDate },
+          ],
           dimensions: [{ name: "deviceModel" }],
           metrics: [{ name: "activeUsers" }],
           orderBys: [{ metric: { metricName: "activeUsers" }, desc: true }],
           limit: "5",
+        }),
+      },
+      ["https://www.googleapis.com/auth/analytics.readonly"]
+    );
+
+    const trafficSourcesResponse = await googleJsonFetch<AnalyticsReport>(
+      `https://analyticsdata.googleapis.com/v1beta/${property}:runReport`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          dateRanges: [
+            { startDate: dateRange.startDate, endDate: dateRange.endDate },
+          ],
+          dimensions: [{ name: "sessionPrimaryChannelGroup" }],
+          metrics: [{ name: "sessions" }],
+          orderBys: [{ metric: { metricName: "sessions" }, desc: true }],
+          limit: "5",
+        }),
+      },
+      ["https://www.googleapis.com/auth/analytics.readonly"]
+    );
+
+    const retentionResponse = await googleJsonFetch<AnalyticsReport>(
+      `https://analyticsdata.googleapis.com/v1beta/${property}:runReport`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          dateRanges: [
+            { startDate: dateRange.startDate, endDate: dateRange.endDate },
+          ],
+          metrics: [
+            { name: "dauPerMau" },
+            { name: "dauPerWau" },
+            { name: "wauPerMau" },
+          ],
         }),
       },
       ["https://www.googleapis.com/auth/analytics.readonly"]
@@ -679,15 +761,17 @@ export async function getAnalyticsOverview(
     const activeUsers = parseMetricValue(reports[0], 0);
     const totalUsers = parseMetricValue(reports[0], 1);
     const newUsers = parseMetricValue(reports[0], 2);
-    const eventCount = parseMetricValue(reports[0], 3);
-    const sessions = parseMetricValue(reports[0], 4);
-    const engagementSeconds = parseMetricValue(reports[0], 5);
-    const engagedSessions = parseMetricValue(reports[0], 6);
+    const returningUsers = parseMetricValue(reports[0], 3);
+    const eventCount = parseMetricValue(reports[0], 4);
+    const sessions = parseMetricValue(reports[0], 5);
+    const engagementSeconds = parseMetricValue(reports[0], 6);
+    const engagedSessions = parseMetricValue(reports[0], 7);
     const trend = parseDimensionMetricRows(reports[1]);
     const topVersions = parseDimensionMetricRows(reports[2]);
     const topEvents = parseDimensionMetricRows(reports[3]);
     const topCountries = parseDimensionMetricRows(reports[4]);
     const topDevices = parseDimensionMetricRows(topDevicesResponse);
+    const trafficSources = parseDimensionMetricRows(trafficSourcesResponse);
     const topVersion = topVersions[0] ?? { label: "Unknown", value: 0 };
     const topEvent = topEvents[0] ?? { label: null, value: 0 };
     const topCountry = topCountries[0] ?? { label: null, value: 0 };
@@ -695,28 +779,56 @@ export async function getAnalyticsOverview(
     const realtimeUsers = Number(
       realtimeResponse.rows?.[0]?.metricValues?.[0]?.value ?? 0
     );
+    const dauPerMau = parseMetricValue(retentionResponse, 0) * 100;
+    const dauPerWau = parseMetricValue(retentionResponse, 1) * 100;
+    const wauPerMau = parseMetricValue(retentionResponse, 2) * 100;
 
     const averageEngagementSeconds =
       activeUsers > 0 ? engagementSeconds / activeUsers : 0;
     const engagedSessionsPerActiveUser =
       activeUsers > 0 ? engagedSessions / activeUsers : 0;
     const sessionsPerUser = activeUsers > 0 ? sessions / activeUsers : 0;
+    const returningUserRate =
+      activeUsers > 0 ? (returningUsers / activeUsers) * 100 : 0;
+    const retention = [
+      {
+        label: "Returning users",
+        value: formatPercent(returningUserRate),
+        note: `${formatWholeNumber(returningUsers)} returning users in ${dateRange.label.toLowerCase()}`,
+      },
+      {
+        label: "DAU / MAU",
+        value: formatPercent(dauPerMau),
+        note: "Daily active users divided by monthly active users",
+      },
+      {
+        label: "DAU / WAU",
+        value: formatPercent(dauPerWau),
+        note: "Daily active users divided by weekly active users",
+      },
+      {
+        label: "WAU / MAU",
+        value: formatPercent(wauPerMau),
+        note: "Weekly active users divided by monthly active users",
+      },
+    ];
 
     return {
       appId,
       configured: true,
+      rangeDays: dateRange.rangeDays,
       source: "Firebase Analytics / GA4",
-      message: `Showing live GA4 metrics for ${appConfig.label} from the last 28 days.`,
+      message: `Showing live GA4 metrics for ${appConfig.label} from ${dateRange.label.toLowerCase()}.`,
       summary: [
         {
           label: "Active users",
           value: formatWholeNumber(activeUsers || totalUsers),
-          note: "Users active in the selected 28-day range",
+          note: `Users active in ${dateRange.label.toLowerCase()}`,
         },
         {
           label: "New users",
           value: formatWholeNumber(newUsers),
-          note: "First-time users in the selected 28-day range",
+          note: `First-time users in ${dateRange.label.toLowerCase()}`,
         },
         {
           label: "Realtime users",
@@ -762,13 +874,15 @@ export async function getAnalyticsOverview(
         `Realtime users: ${formatWholeNumber(realtimeUsers)}`,
       ],
       details: {
-        dateRangeLabel: "Last 28 days",
+        dateRangeLabel: dateRange.label,
         realtimeMinutes: 30,
         trend,
         topEvents,
         topCountries,
         topDevices,
         topVersions,
+        trafficSources,
+        retention,
       },
       health: buildHealth(
         "ok",
@@ -818,6 +932,7 @@ export async function getAnalyticsOverview(
       appId,
       "Firebase Analytics / GA4",
       `Unable to load GA4 metrics for ${appConfig.label}. Check Analytics Data API access, property permissions, and env vars. ${message}`,
+      dateRange.rangeDays,
       defaultAnalyticsSummary(),
       defaultHighlights,
       analyticsHealth
@@ -865,6 +980,7 @@ export async function getCrashlyticsOverview(
       appId,
       "Firebase Crashlytics via BigQuery",
       `Set CRASHLYTICS_BIGQUERY_PROJECT_ID or FIREBASE_PROJECT_ID in the admin panel environment to query Crashlytics exports for ${appConfig.label}.`,
+      28,
       defaultCrashlyticsSummary(),
       defaultHighlights,
       crashlyticsHealth
@@ -942,6 +1058,7 @@ export async function getCrashlyticsOverview(
         appId,
         "Firebase Crashlytics via BigQuery",
         `Both Crashlytics and Sessions export tables are missing for ${appConfig.label}. Enable Crashlytics BigQuery export (with Streaming) in Firebase Console, then trigger a crash to create the tables.`,
+        28,
         defaultCrashlyticsSummary(),
         defaultHighlights,
         buildHealth(
@@ -1026,6 +1143,7 @@ export async function getCrashlyticsOverview(
       appId,
       configured: !crashTableMissing,
       source: "Firebase Crashlytics via BigQuery",
+      rangeDays: 28,
       message: crashTableMissing
         ? `Sessions data found for ${appConfig.label}, but the Crashlytics crash table hasn't been exported to BigQuery yet. Enable Streaming in Firebase Console → Integrations → BigQuery → Crashlytics, then trigger a crash.`
         : `Showing Crashlytics export data for ${appConfig.label} from the last 28 days.`,
@@ -1114,6 +1232,7 @@ export async function getCrashlyticsOverview(
       appId,
       "Firebase Crashlytics via BigQuery",
       buildBigQueryAccessMessage(appConfig.label, message),
+      28,
       defaultCrashlyticsSummary(),
       defaultHighlights,
       crashlyticsHealth
