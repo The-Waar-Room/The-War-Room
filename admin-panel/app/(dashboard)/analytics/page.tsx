@@ -31,6 +31,30 @@ interface AnalyticsOverviewResponse {
   message: string;
   summary: IntegrationMetric[];
   highlights: string[];
+  details?: {
+    dateRangeLabel: string;
+    realtimeMinutes: number;
+    trend: Array<{
+      label: string;
+      value: number;
+    }>;
+    topEvents: Array<{
+      label: string;
+      value: number;
+    }>;
+    topCountries: Array<{
+      label: string;
+      value: number;
+    }>;
+    topDevices: Array<{
+      label: string;
+      value: number;
+    }>;
+    topVersions: Array<{
+      label: string;
+      value: number;
+    }>;
+  };
   health: {
     state: "ok" | "action-required";
     summary: string;
@@ -82,6 +106,80 @@ const guideCards = [
     text: "Countries, device models, and app versions where your product is gaining traction.",
   },
 ];
+
+function formatNumber(value: number) {
+  return new Intl.NumberFormat("en-US").format(value);
+}
+
+function formatCompactNumber(value: number) {
+  return new Intl.NumberFormat("en-US", { notation: "compact" }).format(value);
+}
+
+function formatDateLabel(value: string) {
+  if (!/^\d{8}$/.test(value)) {
+    return value;
+  }
+
+  const year = Number(value.slice(0, 4));
+  const month = Number(value.slice(4, 6)) - 1;
+  const day = Number(value.slice(6, 8));
+  const date = new Date(Date.UTC(year, month, day));
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    timeZone: "UTC",
+  }).format(date);
+}
+
+function MetricBreakdownCard({
+  title,
+  subtitle,
+  items,
+  valueLabel,
+}: {
+  title: string;
+  subtitle: string;
+  items: Array<{ label: string; value: number }>;
+  valueLabel: string;
+}) {
+  const maxValue = Math.max(...items.map((item) => item.value), 1);
+
+  return (
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">{title}</CardTitle>
+        <p className="text-xs text-muted-foreground">{subtitle}</p>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {items.length > 0 ? (
+          items.map((item) => (
+            <div key={item.label} className="space-y-1.5">
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <p className="truncate font-medium text-slate-900">
+                  {item.label}
+                </p>
+                <p className="shrink-0 text-xs text-slate-600">
+                  {formatCompactNumber(item.value)} {valueLabel}
+                </p>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                <div
+                  className="h-full rounded-full bg-sky-500"
+                  style={{
+                    width: `${Math.max((item.value / maxValue) * 100, 8)}%`,
+                  }}
+                />
+              </div>
+            </div>
+          ))
+        ) : (
+          <p className="text-sm text-muted-foreground">No data yet.</p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function AnalyticsPage() {
   const { selectedApp } = useSelectedApp();
@@ -153,151 +251,303 @@ export default function AnalyticsPage() {
       )}
 
       {data && (
-        <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <CardTitle className="text-base">
-                    Analytics Card Set
-                  </CardTitle>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Recommended metrics for the custom admin panel.
-                  </p>
-                </div>
-                <Badge variant={data.configured ? "success" : "outline"}>
-                  {data.configured ? "Connected" : "Setup needed"}
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="grid gap-3 sm:grid-cols-2">
-              {data.summary.map((metric) => (
-                <div
-                  key={metric.label}
-                  className="rounded-2xl border bg-muted/30 p-4"
-                >
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                    {metric.label}
-                  </p>
-                  <p className="mt-2 text-lg font-semibold">
-                    {metric.value ?? "Pending"}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {metric.note}
-                  </p>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Integration Notes</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                  Source
-                </p>
-                <p className="mt-1 text-sm font-medium text-slate-900">
-                  {data.source}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                  What to show
-                </p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {data.highlights.map((item) => (
-                    <span
-                      key={item}
-                      className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-[11px] text-sky-800"
-                    >
-                      {item}
-                    </span>
-                  ))}
-                </div>
-              </div>
-              <div className="rounded-2xl border border-dashed bg-muted/20 p-4 text-sm text-muted-foreground">
-                {data.message}
-              </div>
-              <div className="rounded-2xl border bg-slate-50 p-4">
+        <div className="space-y-4">
+          <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+            <Card>
+              <CardHeader>
                 <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm font-semibold text-slate-900">
-                    Integration Health
-                  </p>
-                  <Badge
-                    variant={data.health.state === "ok" ? "success" : "outline"}
-                  >
-                    {data.health.state === "ok" ? "Healthy" : "Action needed"}
+                  <div>
+                    <CardTitle className="text-base">
+                      Analytics Card Set
+                    </CardTitle>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Recommended metrics for the custom admin panel.
+                    </p>
+                  </div>
+                  <Badge variant={data.configured ? "success" : "outline"}>
+                    {data.configured ? "Connected" : "Setup needed"}
                   </Badge>
                 </div>
-                <p className="mt-2 text-xs text-slate-600">
-                  {data.health.summary}
-                </p>
-                <div className="mt-3 space-y-2">
-                  {data.health.checks.map((check) => {
-                    const tone = healthTone(check.status);
-                    const Icon = tone.icon;
+              </CardHeader>
+              <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                {data.summary.map((metric) => (
+                  <div
+                    key={metric.label}
+                    className="rounded-2xl border bg-muted/30 p-4"
+                  >
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                      {metric.label}
+                    </p>
+                    <p className="mt-2 text-lg font-semibold">
+                      {metric.value ?? "Pending"}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {metric.note}
+                    </p>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
 
-                    return (
-                      <div
-                        key={check.label}
-                        className="rounded-xl border bg-white p-3"
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Integration Notes</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                    Source
+                  </p>
+                  <p className="mt-1 text-sm font-medium text-slate-900">
+                    {data.source}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                    What to show
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {data.highlights.map((item) => (
+                      <span
+                        key={item}
+                        className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-[11px] text-sky-800"
                       >
-                        <div className="flex items-start gap-2">
-                          <Icon
-                            className={`mt-0.5 h-4 w-4 ${tone.iconClassName}`}
-                          />
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <p className="text-xs font-semibold text-slate-900">
-                                {check.label}
+                        {item}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-dashed bg-muted/20 p-4 text-sm text-muted-foreground">
+                  {data.message}
+                </div>
+                <div className="rounded-2xl border bg-slate-50 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm font-semibold text-slate-900">
+                      Integration Health
+                    </p>
+                    <Badge
+                      variant={
+                        data.health.state === "ok" ? "success" : "outline"
+                      }
+                    >
+                      {data.health.state === "ok" ? "Healthy" : "Action needed"}
+                    </Badge>
+                  </div>
+                  <p className="mt-2 text-xs text-slate-600">
+                    {data.health.summary}
+                  </p>
+                  <div className="mt-3 space-y-2">
+                    {data.health.checks.map((check) => {
+                      const tone = healthTone(check.status);
+                      const Icon = tone.icon;
+
+                      return (
+                        <div
+                          key={check.label}
+                          className="rounded-xl border bg-white p-3"
+                        >
+                          <div className="flex items-start gap-2">
+                            <Icon
+                              className={`mt-0.5 h-4 w-4 ${tone.iconClassName}`}
+                            />
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <p className="text-xs font-semibold text-slate-900">
+                                  {check.label}
+                                </p>
+                                <span
+                                  className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${tone.pillClassName}`}
+                                >
+                                  {check.status}
+                                </span>
+                              </div>
+                              <p className="mt-1 text-xs text-slate-600">
+                                {check.detail}
                               </p>
-                              <span
-                                className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${tone.pillClassName}`}
-                              >
-                                {check.status}
-                              </span>
                             </div>
-                            <p className="mt-1 text-xs text-slate-600">
-                              {check.detail}
-                            </p>
                           </div>
                         </div>
+                      );
+                    })}
+                  </div>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                    {data.health.detectedValues.map((item) => (
+                      <div
+                        key={item.label}
+                        className="rounded-xl border border-dashed bg-white p-3"
+                      >
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                          {item.label}
+                        </p>
+                        <p className="mt-1 break-all text-xs text-slate-700">
+                          {item.value ?? "Not detected"}
+                        </p>
                       </div>
-                    );
-                  })}
+                    ))}
+                  </div>
                 </div>
-                <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                  {data.health.detectedValues.map((item) => (
-                    <div
-                      key={item.label}
-                      className="rounded-xl border border-dashed bg-white p-3"
-                    >
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                        {item.label}
-                      </p>
-                      <p className="mt-1 break-all text-xs text-slate-700">
-                        {item.value ?? "Not detected"}
-                      </p>
+                <div className="rounded-2xl border bg-slate-50 p-4">
+                  <p className="text-sm font-semibold text-slate-900">
+                    Best dashboard summary cards
+                  </p>
+                  <ul className="mt-2 space-y-2 text-xs text-slate-600">
+                    <li>Active users over time</li>
+                    <li>Active users in the last 30 minutes</li>
+                    <li>Average engagement time per active user</li>
+                    <li>Top events, countries, devices, and versions</li>
+                  </ul>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {data.details && (
+            <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">
+                    Active Users Trend
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground">
+                    Daily active users from{" "}
+                    {data.details.dateRangeLabel.toLowerCase()}.
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  {data.details.trend.length > 0 ? (
+                    <div className="space-y-4">
+                      <div className="flex h-56 items-end gap-2 rounded-2xl border bg-slate-50 p-4">
+                        {(() => {
+                          const maxValue = Math.max(
+                            ...data.details.trend.map((item) => item.value),
+                            1
+                          );
+
+                          return data.details.trend.map((item) => (
+                            <div
+                              key={item.label}
+                              className="flex min-w-0 flex-1 flex-col items-center justify-end gap-2"
+                            >
+                              <div
+                                className="w-full rounded-t-xl bg-sky-500/85"
+                                style={{
+                                  height: `${Math.max(
+                                    (item.value / maxValue) * 100,
+                                    item.value > 0 ? 8 : 2
+                                  )}%`,
+                                }}
+                                title={`${formatDateLabel(item.label)}: ${formatNumber(item.value)} active users`}
+                              />
+                              <p className="text-[10px] text-slate-500">
+                                {formatDateLabel(item.label)}
+                              </p>
+                            </div>
+                          ));
+                        })()}
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-3">
+                        <div className="rounded-2xl border bg-muted/30 p-4">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                            Days tracked
+                          </p>
+                          <p className="mt-2 text-lg font-semibold">
+                            {data.details.trend.length}
+                          </p>
+                        </div>
+                        <div className="rounded-2xl border bg-muted/30 p-4">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                            Peak day
+                          </p>
+                          <p className="mt-2 text-lg font-semibold">
+                            {formatCompactNumber(
+                              Math.max(
+                                ...data.details.trend.map((item) => item.value),
+                                0
+                              )
+                            )}
+                          </p>
+                        </div>
+                        <div className="rounded-2xl border bg-muted/30 p-4">
+                          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                            Realtime window
+                          </p>
+                          <p className="mt-2 text-lg font-semibold">
+                            {data.details.realtimeMinutes} min
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                  ))}
-                </div>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">
+                      No trend data yet.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-1">
+                <MetricBreakdownCard
+                  title="Top Events"
+                  subtitle="Most triggered GA4 events in the selected range."
+                  items={data.details.topEvents}
+                  valueLabel="events"
+                />
+                <MetricBreakdownCard
+                  title="Top Countries"
+                  subtitle="Where the active audience is coming from."
+                  items={data.details.topCountries}
+                  valueLabel="users"
+                />
               </div>
-              <div className="rounded-2xl border bg-slate-50 p-4">
-                <p className="text-sm font-semibold text-slate-900">
-                  Best dashboard summary cards
-                </p>
-                <ul className="mt-2 space-y-2 text-xs text-slate-600">
-                  <li>Active users over time</li>
-                  <li>Active users in the last 30 minutes</li>
-                  <li>Average engagement time per active user</li>
-                  <li>Engaged sessions per active user</li>
-                </ul>
-              </div>
-            </CardContent>
-          </Card>
+            </div>
+          )}
+
+          {data.details && (
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              <MetricBreakdownCard
+                title="Top Devices"
+                subtitle="Most active device models for the selected app."
+                items={data.details.topDevices}
+                valueLabel="users"
+              />
+              <MetricBreakdownCard
+                title="Top Versions"
+                subtitle="Most active app versions in the selected range."
+                items={data.details.topVersions}
+                valueLabel="users"
+              />
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">
+                    Visibility For Team
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground">
+                    These sections now mirror more of the core GA4 signals your
+                    team needs in one place.
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-3 text-sm text-slate-700">
+                  <div className="rounded-2xl border bg-slate-50 p-4">
+                    <p className="font-medium text-slate-900">Included now</p>
+                    <p className="mt-1 text-xs text-slate-600">
+                      Active users, new users, realtime users, sessions, event
+                      count, engagement, daily trend, top events, countries,
+                      devices, and app versions.
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border bg-slate-50 p-4">
+                    <p className="font-medium text-slate-900">
+                      Source of truth
+                    </p>
+                    <p className="mt-1 text-xs text-slate-600">
+                      All values in this view are read from the GA4 Analytics
+                      Data API for the selected property.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
         </div>
       )}
     </section>

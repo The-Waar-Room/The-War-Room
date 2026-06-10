@@ -14,6 +14,30 @@ export interface InsightOverviewResponse {
   message: string;
   summary: IntegrationMetric[];
   highlights: string[];
+  details?: {
+    dateRangeLabel: string;
+    realtimeMinutes: number;
+    trend: Array<{
+      label: string;
+      value: number;
+    }>;
+    topEvents: Array<{
+      label: string;
+      value: number;
+    }>;
+    topCountries: Array<{
+      label: string;
+      value: number;
+    }>;
+    topDevices: Array<{
+      label: string;
+      value: number;
+    }>;
+    topVersions: Array<{
+      label: string;
+      value: number;
+    }>;
+  };
   health: IntegrationHealth;
 }
 
@@ -423,9 +447,18 @@ function formatDuration(seconds: number) {
   const totalSeconds = Math.round(seconds);
   const hours = Math.floor(totalSeconds / 3600);
   const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const remainingSeconds = totalSeconds % 60;
 
   if (hours > 0) {
     return `${hours}h ${String(minutes).padStart(2, "0")}m`;
+  }
+
+  if (minutes > 0) {
+    return `${minutes}m`;
+  }
+
+  if (remainingSeconds > 0) {
+    return `${remainingSeconds}s`;
   }
 
   return `${minutes}m`;
@@ -436,7 +469,12 @@ function sanitizeBigQueryIdentifier(value: string) {
 }
 
 function parseMetricValue(report: AnalyticsReport | undefined, index: number) {
-  return Number(report?.totals?.[0]?.metricValues?.[index]?.value ?? 0);
+  const totalValue = report?.totals?.[0]?.metricValues?.[index]?.value;
+  if (totalValue !== undefined) {
+    return Number(totalValue);
+  }
+
+  return Number(report?.rows?.[0]?.metricValues?.[index]?.value ?? 0);
 }
 
 function parseFirstRow(report: AnalyticsReport | undefined) {
@@ -445,6 +483,13 @@ function parseFirstRow(report: AnalyticsReport | undefined) {
     dimension: row?.dimensionValues?.[0]?.value ?? null,
     metric: Number(row?.metricValues?.[0]?.value ?? 0),
   };
+}
+
+function parseDimensionMetricRows(report: AnalyticsReport | undefined) {
+  return (report?.rows ?? []).map((row) => ({
+    label: row.dimensionValues?.[0]?.value ?? "Unknown",
+    value: Number(row.metricValues?.[0]?.value ?? 0),
+  }));
 }
 
 function mapBigQueryRows(response: BigQueryResponse) {
@@ -563,6 +608,9 @@ export async function getAnalyticsOverview(
               metrics: [
                 { name: "activeUsers" },
                 { name: "totalUsers" },
+                { name: "newUsers" },
+                { name: "eventCount" },
+                { name: "sessions" },
                 { name: "userEngagementDuration" },
                 { name: "engagedSessions" },
               ],
@@ -576,24 +624,38 @@ export async function getAnalyticsOverview(
             },
             {
               dateRanges: [{ startDate: "28daysAgo", endDate: "today" }],
+              dimensions: [{ name: "date" }],
+              metrics: [{ name: "activeUsers" }],
+              orderBys: [{ dimension: { dimensionName: "date" } }],
+              limit: "28",
+            },
+            {
+              dateRanges: [{ startDate: "28daysAgo", endDate: "today" }],
+              dimensions: [{ name: "appVersion" }],
+              metrics: [{ name: "activeUsers" }],
+              orderBys: [{ metric: { metricName: "activeUsers" }, desc: true }],
+              limit: "5",
+            },
+            {
+              dateRanges: [{ startDate: "28daysAgo", endDate: "today" }],
               dimensions: [{ name: "eventName" }],
               metrics: [{ name: "eventCount" }],
               orderBys: [{ metric: { metricName: "eventCount" }, desc: true }],
-              limit: "1",
+              limit: "5",
             },
             {
               dateRanges: [{ startDate: "28daysAgo", endDate: "today" }],
               dimensions: [{ name: "country" }],
               metrics: [{ name: "activeUsers" }],
               orderBys: [{ metric: { metricName: "activeUsers" }, desc: true }],
-              limit: "1",
+              limit: "5",
             },
             {
               dateRanges: [{ startDate: "28daysAgo", endDate: "today" }],
               dimensions: [{ name: "deviceModel" }],
               metrics: [{ name: "activeUsers" }],
               orderBys: [{ metric: { metricName: "activeUsers" }, desc: true }],
-              limit: "1",
+              limit: "5",
             },
           ],
         }),
@@ -615,12 +677,20 @@ export async function getAnalyticsOverview(
     const reports = batchResponse.reports ?? [];
     const activeUsers = parseMetricValue(reports[0], 0);
     const totalUsers = parseMetricValue(reports[0], 1);
-    const engagementSeconds = parseMetricValue(reports[0], 2);
-    const engagedSessions = parseMetricValue(reports[0], 3);
-    const topVersion = parseFirstRow(reports[1]);
-    const topEvent = parseFirstRow(reports[2]);
-    const topCountry = parseFirstRow(reports[3]);
-    const topDevice = parseFirstRow(reports[4]);
+    const newUsers = parseMetricValue(reports[0], 2);
+    const eventCount = parseMetricValue(reports[0], 3);
+    const sessions = parseMetricValue(reports[0], 4);
+    const engagementSeconds = parseMetricValue(reports[0], 5);
+    const engagedSessions = parseMetricValue(reports[0], 6);
+    const trend = parseDimensionMetricRows(reports[1]);
+    const topVersions = parseDimensionMetricRows(reports[2]);
+    const topEvents = parseDimensionMetricRows(reports[3]);
+    const topCountries = parseDimensionMetricRows(reports[4]);
+    const topDevices = parseDimensionMetricRows(reports[5]);
+    const topVersion = topVersions[0] ?? { label: "Unknown", value: 0 };
+    const topEvent = topEvents[0] ?? { label: null, value: 0 };
+    const topCountry = topCountries[0] ?? { label: null, value: 0 };
+    const topDevice = topDevices[0] ?? { label: null, value: 0 };
     const realtimeUsers = Number(
       realtimeResponse.rows?.[0]?.metricValues?.[0]?.value ?? 0
     );
@@ -629,6 +699,7 @@ export async function getAnalyticsOverview(
       activeUsers > 0 ? engagementSeconds / activeUsers : 0;
     const engagedSessionsPerActiveUser =
       activeUsers > 0 ? engagedSessions / activeUsers : 0;
+    const sessionsPerUser = activeUsers > 0 ? sessions / activeUsers : 0;
 
     return {
       appId,
@@ -642,33 +713,62 @@ export async function getAnalyticsOverview(
           note: "Users active in the selected 28-day range",
         },
         {
+          label: "New users",
+          value: formatWholeNumber(newUsers),
+          note: "First-time users in the selected 28-day range",
+        },
+        {
           label: "Realtime users",
           value: formatWholeNumber(realtimeUsers),
           note: "Active users in the last 30 minutes",
         },
         {
-          label: "Engagement time",
+          label: "Avg engagement time",
           value: formatDuration(averageEngagementSeconds),
           note: `Engaged sessions/user: ${engagedSessionsPerActiveUser.toFixed(2)}`,
         },
         {
+          label: "Total sessions",
+          value: formatWholeNumber(sessions),
+          note: `Sessions per active user: ${sessionsPerUser.toFixed(2)}`,
+        },
+        {
+          label: "Event count",
+          value: formatCompactNumber(eventCount),
+          note: "All tracked GA4 events in the selected range",
+        },
+        {
+          label: "Engaged sessions",
+          value: formatWholeNumber(engagedSessions),
+          note: "Sessions lasting 10s+, with conversions, or multiple views",
+        },
+        {
           label: "Top version",
-          value: topVersion.dimension ?? "Unknown",
-          note: `${formatCompactNumber(topVersion.metric)} active users`,
+          value: topVersion.label,
+          note: `${formatCompactNumber(topVersion.value)} active users`,
         },
       ],
       highlights: [
-        topEvent.dimension
-          ? `Top event: ${topEvent.dimension} (${formatCompactNumber(topEvent.metric)})`
+        topEvent.label
+          ? `Top event: ${topEvent.label} (${formatCompactNumber(topEvent.value)})`
           : "Top events by count",
-        topCountry.dimension
-          ? `Top country: ${topCountry.dimension}`
+        topCountry.label
+          ? `Top country: ${topCountry.label}`
           : "Active users by country",
-        topDevice.dimension
-          ? `Top device: ${topDevice.dimension}`
+        topDevice.label
+          ? `Top device: ${topDevice.label}`
           : "Active users by device model",
         `Realtime users: ${formatWholeNumber(realtimeUsers)}`,
       ],
+      details: {
+        dateRangeLabel: "Last 28 days",
+        realtimeMinutes: 30,
+        trend,
+        topEvents,
+        topCountries,
+        topDevices,
+        topVersions,
+      },
       health: buildHealth(
         "ok",
         propertyResolution.source === "env"
