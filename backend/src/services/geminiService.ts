@@ -1,6 +1,6 @@
 import { getModel } from "../config/vertexai";
 import { getChatAppProfile } from "./chatAppProfileService";
-import { ChatHistoryMessage, PlanType } from "../types";
+import { ChatHistoryMessage, PlanType, DataRequestPayload } from "../types";
 
 interface GeminiChatParams {
   userId: string;
@@ -18,6 +18,7 @@ interface GeminiChatParams {
 interface GeminiChatResult {
   response: string;
   followUpSuggestions: string[];
+  dataRequest?: DataRequestPayload;
   tokenInput: number;
   tokenOutput: number;
 }
@@ -61,11 +62,21 @@ function parseStructuredChatOutput(
   rawText: string,
   message: string,
   fallbackFollowUps: (message: string, answer: string) => string[]
-): { answer: string; followUpSuggestions: string[] } {
+): { answer: string; followUpSuggestions: string[]; dataRequest?: DataRequestPayload } {
   const answerMatch = rawText.match(/<answer>\s*([\s\S]*?)\s*<\/answer>/i);
   const followUpsMatch = rawText.match(/<followups>\s*([\s\S]*?)\s*<\/followups>/i);
+  const dataRequestMatch = rawText.match(/<datarequest>\s*([\s\S]*?)\s*<\/datarequest>/i);
 
-  const answer = (answerMatch?.[1] ?? rawText)
+  let dataRequest: DataRequestPayload | undefined;
+  if (dataRequestMatch) {
+    try {
+      dataRequest = JSON.parse(dataRequestMatch[1].trim());
+    } catch (e) {
+      console.error("[geminiService] Failed to parse datarequest JSON:", e);
+    }
+  }
+
+  const answer = (answerMatch?.[1] ?? (dataRequestMatch ? "" : rawText))
     .replace(/<\/?answer>/gi, "")
     .replace(/<\/?followups>/gi, "")
     .trim();
@@ -78,20 +89,21 @@ function parseStructuredChatOutput(
     .slice(0, 3);
 
   const legacyParsed =
-    answerMatch == null && followUpsMatch == null ? extractLegacyFollowUps(rawText) : null;
+    answerMatch == null && followUpsMatch == null && dataRequestMatch == null ? extractLegacyFollowUps(rawText) : null;
 
   const cleanedAnswer = legacyParsed?.answer ?? answer;
   const cleanedFollowUps =
     parsedFollowUps.length > 0 ? parsedFollowUps : (legacyParsed?.followUpSuggestions ?? []);
 
   const followUpSuggestions =
-    cleanedFollowUps.length >= 2
+    dataRequestMatch ? [] : (cleanedFollowUps.length >= 2
       ? cleanedFollowUps
-      : fallbackFollowUps(message, cleanedAnswer).slice(0, 3);
+      : fallbackFollowUps(message, cleanedAnswer).slice(0, 3));
 
   return {
     answer: cleanedAnswer,
     followUpSuggestions,
+    dataRequest,
   };
 }
 
@@ -161,6 +173,7 @@ ${contextStr}
   return {
     response: parsed.answer,
     followUpSuggestions: parsed.followUpSuggestions,
+    dataRequest: parsed.dataRequest,
     tokenInput: usage?.promptTokenCount ?? 0,
     tokenOutput: usage?.candidatesTokenCount ?? 0,
   };

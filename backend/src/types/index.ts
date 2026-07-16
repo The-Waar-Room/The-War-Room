@@ -14,7 +14,6 @@ export interface AppDoc {
 export interface UserDoc {
   uid: string;
   app_id: string;
-  email: string;
   created_at: FirebaseFirestore.Timestamp;
   last_seen: FirebaseFirestore.Timestamp;
   is_banned?: boolean;
@@ -120,17 +119,21 @@ export interface AuthenticatedRequest extends Request {
   appId?: string;
   appDoc?: AppDoc;
   user?: UserDoc;
-  decodedToken?: { uid: string; email?: string };
+  decodedToken?: { uid: string };
   planType?: PlanType;
   planLimits?: PlanLimits;
 }
 
-// ── API response shapes ──
+export interface DataRequestPayload {
+  apps: string[];
+  types: ("usage" | "app_shield" | "notification_control" | "focus_enhancer")[];
+}
 
 export interface ChatResponse {
   success: boolean;
   response: string;
   followUpSuggestions?: string[];
+  dataRequest?: DataRequestPayload;
   usage: {
     messagesUsedToday: number;
     dailyLimit: number;

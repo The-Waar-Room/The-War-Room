@@ -134,6 +134,7 @@ chatRouter.post(
         success: true,
         response: result.response,
         followUpSuggestions: result.followUpSuggestions,
+        dataRequest: result.dataRequest,
         usage,
       });
 
