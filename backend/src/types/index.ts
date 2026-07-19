@@ -158,6 +158,7 @@ export interface ChatRequestBody {
   sessionId: string;
   context?: Record<string, unknown>;
   history?: ChatHistoryMessage[];
+  isToolCall?: boolean;
 }
 
 // ── Subscription verify body ──

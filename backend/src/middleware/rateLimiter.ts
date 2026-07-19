@@ -49,6 +49,14 @@ export async function rateLimiter(
       currentCount = 0;
     }
 
+    req.planType = planType;
+    req.planLimits = planLimits;
+
+    if (req.body.isToolCall === true) {
+      next();
+      return;
+    }
+
     if (currentCount >= planLimits.daily_messages) {
       res.status(429).json({
         success: false,
@@ -63,8 +71,6 @@ export async function rateLimiter(
       return;
     }
 
-    req.planType = planType;
-    req.planLimits = planLimits;
     next();
   } catch (err) {
     console.error("[rateLimiter] Error:", err);

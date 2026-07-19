@@ -11,6 +11,7 @@ interface TrackUsageParams {
   appId: string;
   tokenInput: number;
   tokenOutput: number;
+  isToolCall?: boolean;
 }
 
 /**
@@ -19,7 +20,7 @@ interface TrackUsageParams {
  * - Firestore: increment ai_usage document counters (atomic)
  */
 export async function trackUsage(params: TrackUsageParams): Promise<number> {
-  const { userId, appId, tokenInput, tokenOutput } = params;
+  const { userId, appId, tokenInput, tokenOutput, isToolCall } = params;
 
   const todayIST = getTodayIST();
   const redisKey = `rate:${userId}:${appId}:${todayIST}`;
@@ -29,10 +30,14 @@ export async function trackUsage(params: TrackUsageParams): Promise<number> {
   let newCount = 0;
   if (redis) {
     try {
-      newCount = await redis.incr(redisKey);
-      if (newCount === 1) {
-        const secondsUntilMidnight = getSecondsUntilMidnightIST();
-        await redis.expire(redisKey, secondsUntilMidnight);
+      if (isToolCall) {
+        newCount = (await redis.get<number>(redisKey)) ?? 0;
+      } else {
+        newCount = await redis.incr(redisKey);
+        if (newCount === 1) {
+          const secondsUntilMidnight = getSecondsUntilMidnightIST();
+          await redis.expire(redisKey, secondsUntilMidnight);
+        }
       }
     } catch (error) {
       console.error("[usage] Redis write failed; continuing with Firestore:", error);
@@ -53,7 +58,7 @@ export async function trackUsage(params: TrackUsageParams): Promise<number> {
       user_id: userId,
       app_id: appId,
       date: todayIST,
-      message_count: FieldValue.increment(1),
+      message_count: isToolCall ? FieldValue.increment(0) : FieldValue.increment(1),
       token_input: FieldValue.increment(tokenInput),
       token_output: FieldValue.increment(tokenOutput),
       cost_usd: FieldValue.increment(costUsd),

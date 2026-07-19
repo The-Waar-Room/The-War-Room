@@ -117,6 +117,7 @@ chatRouter.post(
           appId,
           tokenInput: result.tokenInput,
           tokenOutput: result.tokenOutput,
+          isToolCall: req.body.isToolCall,
         });
 
         usage = {
