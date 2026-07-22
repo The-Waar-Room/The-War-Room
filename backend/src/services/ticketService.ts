@@ -13,7 +13,6 @@ export type TicketPriority = "low" | "normal" | "high";
 export interface TicketDoc {
   ticket_id: string;
   uid: string;
-  email: string;
   app_id: string;
   subject: string;
   status: TicketStatus;
@@ -47,7 +46,6 @@ function generateTicketId(): string {
 
 export async function createTicket(
   uid: string,
-  email: string,
   appId: string,
   subject: string,
   message: string,
@@ -63,7 +61,6 @@ export async function createTicket(
   const ticketData = {
     ticket_id: ticketId,
     uid,
-    email,
     app_id: appId,
     subject: subject || "Support Request",
     status: "open" as TicketStatus,

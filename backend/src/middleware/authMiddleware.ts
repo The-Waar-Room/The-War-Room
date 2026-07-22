@@ -11,7 +11,7 @@ async function verifyBearerToken(req: AuthenticatedRequest): Promise<void> {
 
   const token = authHeader.slice(7);
   const decoded = await getAuth().verifyIdToken(token);
-  req.decodedToken = { uid: decoded.uid, email: decoded.email };
+  req.decodedToken = { uid: decoded.uid };
 }
 
 /**
@@ -72,7 +72,6 @@ export async function authMiddleware(
         .set({
           uid: req.decodedToken!.uid,
           app_id: appId,
-          email: req.decodedToken!.email ?? "",
           created_at: now,
           last_seen: now,
         });

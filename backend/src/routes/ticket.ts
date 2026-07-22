@@ -35,7 +35,6 @@ ticketRouter.post(
   async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       const uid = req.decodedToken!.uid;
-      const email = req.decodedToken!.email ?? "";
       const appId = req.appId!;
       const { action } = req.body;
 
@@ -74,7 +73,6 @@ ticketRouter.post(
 
           const result = await createTicket(
             uid,
-            email,
             appId,
             safeSubject,
             safeMessage,

@@ -44,7 +44,7 @@ test("derives the six-month plan from the v2 line item", () => {
     "premium_access"
   );
 
-  assert.equal(snapshot.planType, "sixmonth");
+  assert.equal(snapshot.planType, "premium-six-month");
   assert.equal(snapshot.basePlanId, "premium-six-month");
   assert.equal(snapshot.productId, "premium_access");
   assert.equal(snapshot.status, "active");
@@ -65,7 +65,7 @@ test("retains the old token reference during a Google Play plan replacement", ()
   });
 
   assert.equal(snapshot.linkedPurchaseToken, "old-token");
-  assert.equal(snapshot.planType, "yearly");
+  assert.equal(snapshot.planType, "premium-yearly");
 });
 
 test("derives monthly and yearly plans without trusting client plan data", () => {
@@ -90,8 +90,8 @@ test("derives monthly and yearly plans without trusting client plan data", () =>
     ],
   });
 
-  assert.equal(monthly.planType, "monthly");
-  assert.equal(yearly.planType, "yearly");
+  assert.equal(monthly.planType, "premium-monthly");
+  assert.equal(yearly.planType, "premium-yearly");
   assert.equal(yearly.status, "grace_period");
 });
 

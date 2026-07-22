@@ -19,7 +19,6 @@ userRouter.post(
   async (req: AuthenticatedRequest, res: Response): Promise<void> => {
     try {
       const uid = req.decodedToken!.uid;
-      const email = req.decodedToken!.email ?? "";
       const appId = req.appId!;
 
       const db = getFirestore();
@@ -36,7 +35,6 @@ userRouter.post(
       await userRef.set({
         uid,
         app_id: appId,
-        email,
         created_at: FieldValue.serverTimestamp(),
         last_seen: FieldValue.serverTimestamp(),
       });

@@ -99,7 +99,7 @@ export interface GlobalConfig {
 
 // ── Plan & subscription types ──
 
-export type PlanType = "free" | "monthly" | "sixmonth" | "yearly";
+export type PlanType = "free" | "premium-monthly" | "premium-six-month" | "premium-yearly";
 export type ConfigPlanKey = "free" | "premium";
 
 /** Maps a subscription plan type to the config plan key for limit lookups */
@@ -108,9 +108,9 @@ export function toConfigPlan(planType: PlanType): ConfigPlanKey {
 }
 
 export const PRODUCT_TO_PLAN: Record<string, { plan: PlanType; days: number }> = {
-  "premium-monthly": { plan: "monthly", days: 30 },
-  "premium-six-month": { plan: "sixmonth", days: 180 },
-  "premium-yearly": { plan: "yearly", days: 365 },
+  "premium-monthly": { plan: "premium-monthly", days: 30 },
+  "premium-six-month": { plan: "premium-six-month", days: 180 },
+  "premium-yearly": { plan: "premium-yearly", days: 365 },
 };
 
 // ── Extended Express request ──
