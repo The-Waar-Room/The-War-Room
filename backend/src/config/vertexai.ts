@@ -1,4 +1,4 @@
-import { VertexAI, GenerativeModel } from "@google-cloud/vertexai";
+import { VertexAI, GenerativeModel, GenerationConfig } from "@google-cloud/vertexai";
 
 let model: GenerativeModel;
 
@@ -25,4 +25,15 @@ export function initVertexAI(): void {
 export function getModel(): GenerativeModel {
   if (!model) throw new Error("Vertex AI not initialized — call initVertexAI() first");
   return model;
+}
+
+/**
+ * Turns off Gemini 2.5 "thinking" for a request. Thinking tokens are billed as
+ * output and also count against maxOutputTokens. This SDK version has no typed
+ * thinkingConfig field, but generationConfig is sent to the API as-is.
+ * A per-request generationConfig replaces the model-level one, so this must be
+ * applied on every generateContent call.
+ */
+export function withThinkingDisabled(config: GenerationConfig): GenerationConfig {
+  return { ...config, thinkingConfig: { thinkingBudget: 0 } } as GenerationConfig;
 }

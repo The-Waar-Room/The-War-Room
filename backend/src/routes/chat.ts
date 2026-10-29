@@ -1,5 +1,4 @@
 import { Router, Response } from "express";
-import { createHash } from "crypto";
 import { appVerify } from "../middleware/appVerify";
 import { authMiddleware } from "../middleware/authMiddleware";
 import { killSwitch } from "../middleware/killSwitch";
@@ -7,7 +6,6 @@ import { rateLimiter, getUserPlan, getTodayIST } from "../middleware/rateLimiter
 import { chat } from "../services/geminiService";
 import { moderateChatMessage } from "../services/chatModerationService";
 import { trackUsage } from "../services/usageService";
-import { writeChatEvent } from "../services/chatEventService";
 import { AuthenticatedRequest, ChatRequestBody, toConfigPlan } from "../types";
 import { getGlobalConfig } from "../config/configCache";
 import { getRedis } from "../config/redis";
@@ -49,13 +47,6 @@ chatRouter.post(
       const planType = req.planType!;
       const planLimits = req.planLimits!;
 
-      // ── Prepare context snapshot + hash for analytics ──
-      const contextJson = context ? JSON.stringify(context) : "";
-      const contextPreview = contextJson.slice(0, 512);
-      const contextHash = createHash("sha256").update(contextJson).digest("hex");
-      const promptPreview = message.slice(0, 160);
-
-      const requestStart = Date.now();
       const moderation = moderateChatMessage(message, appId, appName);
 
       if (moderation.action !== "allow") {
@@ -69,23 +60,6 @@ chatRouter.post(
             category: moderation.category,
           },
         });
-
-        writeChatEvent({
-          userId,
-          appId,
-          sessionId,
-          promptPreview,
-          response: moderation.response ?? "",
-          contextPreview,
-          contextHash,
-          tokenInput: 0,
-          tokenOutput: 0,
-          planType,
-          status: "success",
-          latencyMs: Date.now() - requestStart,
-          moderationAction: moderation.action,
-          moderationCategory: moderation.category,
-        }).catch((err: unknown) => console.error("[chat] writeChatEvent failed:", err));
         return;
       }
 
@@ -110,13 +84,11 @@ chatRouter.post(
         plan: typeof planType;
       } | null = null;
 
-      // ── Track usage (Redis + Firestore) ──
+      // ── Track usage (Redis daily counter) ──
       try {
         const messagesUsedToday = await trackUsage({
           userId,
           appId,
-          tokenInput: result.tokenInput,
-          tokenOutput: result.tokenOutput,
           isToolCall: req.body.isToolCall,
         });
 
@@ -138,24 +110,6 @@ chatRouter.post(
         dataRequest: result.dataRequest,
         usage,
       });
-
-      // ── Fire-and-forget: write chat event for admin drilldown ──
-      writeChatEvent({
-        userId,
-        appId,
-        sessionId,
-        promptPreview,
-        response: result.response,
-        contextPreview,
-        contextHash,
-        tokenInput: result.tokenInput,
-        tokenOutput: result.tokenOutput,
-        planType,
-        status: "success",
-        latencyMs: Date.now() - requestStart,
-        moderationAction: moderation.action,
-        moderationCategory: moderation.category,
-      }).catch((err: unknown) => console.error("[chat] writeChatEvent failed:", err));
     } catch (err) {
       console.error("[chat] Error:", err);
       res.status(500).json({ success: false, error: "Internal server error" });

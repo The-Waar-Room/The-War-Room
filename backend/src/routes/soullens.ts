@@ -218,8 +218,6 @@ soullensRouter.post(
             messagesUsedToday: await trackUsage({
               userId: req.decodedToken!.uid,
               appId: req.appId!,
-              tokenInput: result.tokenInput,
-              tokenOutput: result.tokenOutput,
             }),
             dailyLimit: req.planLimits!.daily_messages,
             remaining: 0,
@@ -291,8 +289,6 @@ soullensRouter.post(
             messagesUsedToday: await trackUsage({
               userId: req.decodedToken!.uid,
               appId: req.appId!,
-              tokenInput: result.tokenInput,
-              tokenOutput: result.tokenOutput,
             }),
             dailyLimit: req.planLimits!.daily_messages,
             remaining: 0,

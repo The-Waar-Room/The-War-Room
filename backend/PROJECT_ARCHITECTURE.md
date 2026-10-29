@@ -137,14 +137,13 @@ requestLogger → appVerify → authMiddleware → [killSwitch] → [rateLimiter
 
 ## 7. Firestore Collections
 
-| Collection      | Document ID                  | Key Fields                                                                                                 |
-| --------------- | ---------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `apps`          | app_id (e.g. "descroll")     | app_name, secret_hash, platform, is_active                                                                 |
-| `users`         | Firebase UID                 | uid, app_id, email, is_banned, created_at, last_seen                                                       |
-| `subscriptions` | auto                         | user_id, app_id, plan_type, purchase_token, product_id, status, starts_at, expires_at, raw_google_response |
-| `ai_usage`      | `{uid}_{appId}_{YYYY-MM-DD}` | message_count, token_input, token_output, cost_usd                                                         |
-| `chat_history`  | auto                         | user_id, app_id, session_id, role, content, tokens_used, created_at                                        |
-| `config`        | "global"                     | kill_switch (bool), plans (map with daily_messages + max_context_chars per plan)                           |
+| Collection      | Document ID              | Key Fields                                                                                                 |
+| --------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| `apps`          | app_id (e.g. "descroll") | app_name, secret_hash, platform, is_active                                                                 |
+| `users`         | Firebase UID             | uid, app_id, email, is_banned, created_at, last_seen                                                       |
+| `subscriptions` | auto                     | user_id, app_id, plan_type, purchase_token, product_id, status, starts_at, expires_at, raw_google_response |
+| `chat_history`  | auto                     | user_id, app_id, session_id, role, content, tokens_used, created_at                                        |
+| `config`        | "global"                 | kill_switch (bool), plans (map with daily_messages + max_context_chars per plan)                           |
 
 ## 8. Plan Limits (config/global)
 
@@ -169,11 +168,10 @@ requestLogger → appVerify → authMiddleware → [killSwitch] → [rateLimiter
 2. Validate: message (required, max 1000), sessionId (required), context (optional)
 3. Build system prompt with app name, plan-based word limit, user context (truncated to plan's max_context_chars)
 4. Fetch last 10 chat messages from Firestore for conversation memory
-5. Call Vertex AI Gemini 2.5 Flash (standard mode, max 1024 output tokens, temp 0.7)
+5. Call Vertex AI Gemini 2.5 Flash (thinking disabled via thinkingBudget: 0, max 1024 output tokens)
 6. INCR Redis rate counter + set midnight IST expiry
-7. Atomic Firestore increment on ai_usage (message_count, tokens, cost_usd)
-8. Batch save user + assistant messages to chat_history
-9. Return response + usage envelope
+7. Batch save user + assistant messages to chat_history
+8. Return response + usage envelope
 
 ## 11. Security Model
 
@@ -188,7 +186,7 @@ requestLogger → appVerify → authMiddleware → [killSwitch] → [rateLimiter
 
 ## 12. Cost Controls
 
-- Gemini 2.5 Flash standard mode only (no thinking = ~10x cheaper)
+- Gemini 2.5 Flash with thinking disabled on every request (`withThinkingDisabled`); thinking tokens are billed as output
 - Max output tokens: 1024
 - Context chars limited by plan
 - Redis for rate checks (not Firestore reads)

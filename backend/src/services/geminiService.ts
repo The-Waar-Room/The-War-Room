@@ -1,4 +1,4 @@
-import { getModel } from "../config/vertexai";
+import { getModel, withThinkingDisabled } from "../config/vertexai";
 import { getChatAppProfile } from "./chatAppProfileService";
 import { ChatHistoryMessage, PlanType, DataRequestPayload } from "../types";
 
@@ -159,9 +159,9 @@ ${contextStr}
   const result = await model.generateContent({
     systemInstruction: { role: "system", parts: [{ text: systemPrompt }] },
     contents,
-    generationConfig: {
+    generationConfig: withThinkingDisabled({
       maxOutputTokens,
-    },
+    }),
   });
 
   const response = result.response;

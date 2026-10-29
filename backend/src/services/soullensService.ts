@@ -1,7 +1,7 @@
 import { createHash } from "crypto";
 import { FieldValue } from "firebase-admin/firestore";
 import { getFirestore } from "../config/firebase";
-import { getModel } from "../config/vertexai";
+import { getModel, withThinkingDisabled } from "../config/vertexai";
 
 export type SoulLensReligion = "hinduism";
 
@@ -223,10 +223,10 @@ export async function generateSoulLensInsight(
         ],
       },
     ],
-    generationConfig: {
+    generationConfig: withThinkingDisabled({
       maxOutputTokens: params.operation === "explain" ? 220 : 260,
       temperature: params.operation === "explain" ? 0.5 : 0.7,
-    },
+    }),
   });
 
   const rawText =
