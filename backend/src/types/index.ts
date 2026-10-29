@@ -182,25 +182,3 @@ export interface SubscriptionEventBody {
   occurredAt?: string;
   metadata?: Record<string, unknown>;
 }
-
-// ── Subscription lifecycle event ──
-
-export interface SubscriptionEventDoc {
-  user_id: string;
-  app_id: string;
-  event_type: SubscriptionEventType;
-  event_source: SubscriptionEventSource;
-  plan_type?: string;
-  product_id?: string;
-  base_plan_id?: string;
-  purchase_token_hash?: string;
-  purchase_state?: number;
-  order_id?: string;
-  billing_response_code?: number;
-  billing_debug_message?: string;
-  old_status?: string;
-  new_status?: string;
-  metadata?: Record<string, unknown>;
-  occurred_at?: FirebaseFirestore.Timestamp;
-  created_at: FirebaseFirestore.Timestamp;
-}

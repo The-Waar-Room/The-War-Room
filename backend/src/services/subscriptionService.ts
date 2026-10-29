@@ -285,6 +285,10 @@ function describeGooglePlayError(error: unknown): string {
   return error instanceof Error ? error.message : "Google Play verification failed";
 }
 
+/**
+ * Writes a subscription lifecycle event to Cloud Logging (structured JSON).
+ * Search Logs Explorer for jsonPayload.event="subscription_event".
+ */
 export async function logSubscriptionEvent({
   userId,
   appId,
@@ -303,13 +307,12 @@ export async function logSubscriptionEvent({
   occurredAt,
   metadata,
 }: LogSubscriptionEventInput): Promise<void> {
-  const db = getFirestore();
   const eventDoc: Record<string, unknown> = {
+    event: "subscription_event",
     user_id: userId,
     app_id: appId,
     event_type: eventType,
     event_source: eventSource,
-    created_at: FieldValue.serverTimestamp(),
   };
 
   if (planType !== undefined) eventDoc.plan_type = planType;
@@ -323,9 +326,9 @@ export async function logSubscriptionEvent({
   if (oldStatus !== undefined) eventDoc.old_status = oldStatus;
   if (newStatus !== undefined) eventDoc.new_status = newStatus;
   if (metadata !== undefined) eventDoc.metadata = metadata;
-  if (occurredAt) eventDoc.occurred_at = occurredAt;
+  if (occurredAt) eventDoc.occurred_at = occurredAt.toISOString();
 
-  await db.collection("subscription_events").add(eventDoc);
+  console.log(JSON.stringify(eventDoc));
 }
 
 /**

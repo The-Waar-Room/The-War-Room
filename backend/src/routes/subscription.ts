@@ -300,7 +300,7 @@ subscriptionRouter.post("/verify", appVerify, authMiddleware, linkSubscription);
 
 /**
  * POST /api/subscription/event
- * Persist non-authoritative client or backend lifecycle events for audit history.
+ * Record non-authoritative client lifecycle events in Cloud Logging for audit history.
  * Middleware: appVerify → authMiddleware
  */
 subscriptionRouter.post(
