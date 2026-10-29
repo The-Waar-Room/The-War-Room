@@ -40,8 +40,7 @@ backend/
 │   ├── routes/
 │   │   ├── user.ts            — POST /api/user/register
 │   │   ├── chat.ts            — POST /api/chat (full AI flow)
-│   │   ├── subscription.ts    — POST /api/subscription/verify + GET /api/subscription/status
-│   │   └── admin.ts           — GET dashboard/users/usage + POST ban-user/kill-switch
+│   │   └── subscription.ts    — POST /api/subscription/verify + GET /api/subscription/status
 │   ├── services/
 │   │   ├── geminiService.ts   — System prompt builder + chat history + Vertex AI call
 │   │   ├── subscriptionService.ts — Google Play purchase verify + Firestore upsert
@@ -130,16 +129,6 @@ requestLogger → appVerify → authMiddleware → [killSwitch] → [rateLimiter
 | POST   | `/api/subscription/verify` | appVerify → auth | Verify Google Play purchase server-side |
 | GET    | `/api/subscription/status` | appVerify → auth | Get user's active plan                  |
 
-### Admin
-
-| Method | Path                     | Middleware             | Description                       |
-| ------ | ------------------------ | ---------------------- | --------------------------------- |
-| GET    | `/api/admin/dashboard`   | adminAuth (JWT_SECRET) | Total users, active subscriptions |
-| GET    | `/api/admin/users`       | adminAuth              | List users with filters           |
-| GET    | `/api/admin/usage`       | adminAuth              | AI usage stats with filters       |
-| POST   | `/api/admin/ban-user`    | adminAuth              | Ban a user                        |
-| POST   | `/api/admin/kill-switch` | adminAuth              | Enable/disable AI globally        |
-
 ### Health
 
 | Method | Path      | Middleware | Description                        |
@@ -192,7 +181,6 @@ requestLogger → appVerify → authMiddleware → [killSwitch] → [rateLimiter
 - App identity: SHA-256 hashed secret comparison
 - User identity: Firebase JWT verification
 - Ban enforcement: checked in authMiddleware
-- Admin: separate JWT_SECRET-based auth (not Firebase)
 - Error messages: always generic (never expose internals)
 - Docker: non-root user in production
 - Rate limit: enforced BEFORE AI call (never waste tokens)

@@ -1,18 +1,4 @@
 # =========================
-# Admin Panel (Next.js)
-# =========================
-admin-panel/node_modules/
-admin-panel/.next/
-admin-panel/out/
-admin-panel/.vercel/
-admin-panel/coverage/
-admin-panel/*.tsbuildinfo
-admin-panel/.env
-admin-panel/.env.local
-admin-panel/.env.*.local
-!admin-panel/.env.example
-
-# =========================
 # Backend (Node + TypeScript)
 # =========================
 backend/node_modules/

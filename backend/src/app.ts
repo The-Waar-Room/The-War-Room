@@ -6,7 +6,6 @@ import { errorHandler } from "./middleware/errorHandler";
 import { userRouter } from "./routes/user";
 import { chatRouter } from "./routes/chat";
 import { subscriptionRouter } from "./routes/subscription";
-import { adminRouter } from "./routes/admin";
 import { ticketRouter } from "./routes/ticket";
 import { soullensRouter } from "./routes/soullens";
 
@@ -35,7 +34,6 @@ app.use("/api/chat", chatRouter);
 app.use("/api/soullens", soullensRouter);
 app.use("/api/subscription", subscriptionRouter);
 app.use("/api/ticket", ticketRouter);
-app.use("/api/admin", adminRouter);
 
 // ── 404 fallback ──
 app.use((_req, res) => {
