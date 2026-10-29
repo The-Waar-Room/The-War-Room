@@ -2,22 +2,22 @@
 
 ## 1. Overview
 
-Central AI Gateway backend serving multiple mobile apps. Handles AI chat via Vertex AI Gemini 2.5 Flash, subscription verification via Google Play, rate limiting via Upstash Redis, and user management via Firebase + Firestore.
+Central AI Gateway backend serving multiple mobile apps. Handles AI chat via Vertex AI Gemini 3.5 Flash-Lite, subscription verification via Google Play, rate limiting via Upstash Redis, and user management via Firebase + Firestore.
 
 **Apps served:** deScroll (Android), future apps via the same API.
 
 ## 2. Tech Stack
 
-| Component     | Technology                                                |
-| ------------- | --------------------------------------------------------- |
-| Runtime       | Node.js 20+ (TypeScript, Express 5)                       |
-| Hosting       | Google Cloud Run (auto-scaling container)                 |
-| Auth          | Firebase Admin SDK (JWT verification)                     |
-| Database      | Firestore (Native mode)                                   |
-| AI Model      | Vertex AI — Gemini 2.5 Flash (standard mode, no thinking) |
-| Rate Limiting | Upstash Redis (daily counters per user/app)               |
-| Secrets       | Google Secret Manager (all secrets loaded at startup)     |
-| Container     | Docker (multi-stage build, non-root user)                 |
+| Component     | Technology                                                            |
+| ------------- | --------------------------------------------------------------------- |
+| Runtime       | Node.js 20+ (TypeScript, Express 5)                                   |
+| Hosting       | Google Cloud Run (auto-scaling container)                             |
+| Auth          | Firebase Admin SDK (JWT verification)                                 |
+| Database      | Firestore (Native mode)                                               |
+| AI Model      | Vertex AI — Gemini 3.5 Flash-Lite (global endpoint, minimal thinking) |
+| Rate Limiting | Upstash Redis (daily counters per user/app)                           |
+| Secrets       | Google Secret Manager (all secrets loaded at startup)                 |
+| Container     | Docker (multi-stage build, non-root user)                             |
 
 ## 3. Folder Structure
 
@@ -27,7 +27,7 @@ backend/
 │   ├── config/
 │   │   ├── firebase.ts        — Firebase Admin SDK init + Firestore/Auth getters
 │   │   ├── redis.ts           — Upstash Redis client init + connection verify
-│   │   ├── vertexai.ts        — Vertex AI Gemini 2.5 Flash setup (standard mode)
+│   │   ├── vertexai.ts        — Vertex AI Gemini 3.5 Flash-Lite setup (global endpoint)
 │   │   ├── secrets.ts         — Google Secret Manager loader (startup fetch)
 │   │   └── configCache.ts     — 5-min in-memory cache for config/global document
 │   ├── middleware/
@@ -63,7 +63,7 @@ server.ts
   ├── loadSecrets()      → Fetch UPSTASH_REDIS_URL, UPSTASH_REDIS_TOKEN, JWT_SECRET from Secret Manager
   ├── initFirebase()     → Initialize Firebase Admin SDK (Application Default Credentials)
   ├── initRedis()        → Connect to Upstash Redis, verify with PING
-  ├── initVertexAI()     → Initialize Gemini 2.5 Flash model (standard mode, 1024 max tokens)
+  ├── initVertexAI()     → Initialize Gemini 3.5 Flash-Lite model (global endpoint)
   └── app.listen(8080)   → Start Express server
 ```
 
@@ -168,7 +168,7 @@ requestLogger → appVerify → authMiddleware → [killSwitch] → [rateLimiter
 2. Validate: message (required, max 1000), sessionId (required), context (optional)
 3. Build system prompt with app name, plan-based word limit, user context (truncated to plan's max_context_chars)
 4. Fetch last 10 chat messages from Firestore for conversation memory
-5. Call Vertex AI Gemini 2.5 Flash (thinking disabled via thinkingBudget: 0, max 1024 output tokens)
+5. Call Vertex AI Gemini 3.5 Flash-Lite (thinkingLevel MINIMAL on every request, max 1024 output tokens)
 6. INCR Redis rate counter + set midnight IST expiry
 7. Batch save user + assistant messages to chat_history
 8. Return response + usage envelope
@@ -186,7 +186,7 @@ requestLogger → appVerify → authMiddleware → [killSwitch] → [rateLimiter
 
 ## 12. Cost Controls
 
-- Gemini 2.5 Flash with thinking disabled on every request (`withThinkingDisabled`); thinking tokens are billed as output
+- Gemini 3.5 Flash-Lite with thinkingLevel MINIMAL on every request (`withMinimalThinking`); thinking tokens are billed as output
 - Max output tokens: 1024
 - Context chars limited by plan
 - Redis for rate checks (not Firestore reads)
